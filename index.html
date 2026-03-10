@@ -1400,6 +1400,7 @@
       runTitleEl.textContent = title;
       runTextEl.textContent = text;
       runMetaEl.textContent = meta || "";
+      runActionBtnEl.style.display = "";
       runActionBtnEl.textContent = btnLabel;
       runActionBtnEl.onclick = onClick;
       runOverlayEl.classList.remove("hidden");
@@ -1933,9 +1934,9 @@
         if (state.sound.enabled) AudioManager.upgrade();
         toast(`Nowa moc: ${kind.toUpperCase()}!`);
       }
-      if (kind === "fire") document.getElementById("powerFire").classList.remove("lock");
-      if (kind === "blade") document.getElementById("powerBlade").classList.remove("lock");
-      if (kind === "storm") document.getElementById("powerStorm").classList.remove("lock");
+      if (cyclePowerBtnEl) {
+        cyclePowerBtnEl.classList.remove("lock");
+      }
     }
 
     function dealDamage(target, dmg) {
@@ -3737,14 +3738,15 @@
       }
     }
 
+    const canvasTouchRoles = new Map();
+
     function clearTouchState() {
+      canvasTouchRoles.clear();
       state.pressed.left = false;
       state.pressed.right = false;
       state.player.shieldKey = false;
       state.player.shieldActive = false;
     }
-
-    const canvasTouchRoles = new Map();
 
     function syncCanvasDirections() {
       let left = false;
@@ -3753,8 +3755,8 @@
         if (role === "left") left = true;
         if (role === "right") right = true;
       });
-      state.pressed.left = left || state.pressed.left;
-      state.pressed.right = right || state.pressed.right;
+      state.pressed.left = left;
+      state.pressed.right = right;
     }
 
     function getTouchRole(x) {
@@ -3824,6 +3826,36 @@
         ev.preventDefault();
         onArenaTouchEnd(ev.pointerId);
       });
+    } else {
+      canvas.addEventListener("touchstart", ev => {
+        ev.preventDefault();
+        for (const t of ev.changedTouches) {
+          const rect = canvas.getBoundingClientRect();
+          onArenaTouchStart(t.identifier, t.clientX - rect.left, t.clientY - rect.top);
+        }
+      }, { passive: false });
+
+      canvas.addEventListener("touchmove", ev => {
+        ev.preventDefault();
+        for (const t of ev.changedTouches) {
+          const rect = canvas.getBoundingClientRect();
+          onArenaTouchMove(t.identifier, t.clientX - rect.left);
+        }
+      }, { passive: false });
+
+      canvas.addEventListener("touchend", ev => {
+        ev.preventDefault();
+        for (const t of ev.changedTouches) {
+          onArenaTouchEnd(t.identifier);
+        }
+      }, { passive: false });
+
+      canvas.addEventListener("touchcancel", ev => {
+        ev.preventDefault();
+        for (const t of ev.changedTouches) {
+          onArenaTouchEnd(t.identifier);
+        }
+      }, { passive: false });
     }
 
     bindHold("leftBtn", "left", true);
