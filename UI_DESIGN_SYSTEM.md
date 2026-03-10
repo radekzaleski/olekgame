@@ -193,3 +193,141 @@ Kazdy PR ruszajacy UI powinien potwierdzac:
 - [ ] brak zaslaniania krytycznych elementow walki
 - [ ] animacje zgodne z timingami systemu
 - [ ] stany disabled/active/error sa widoczne i spojne
+
+## 12. Starter kit do wdrozen (copy/paste)
+
+### 12.1 CSS custom properties
+
+```css
+:root {
+  --bg1: #0f172a;
+  --bg2: #1e293b;
+  --panel: rgba(15, 23, 42, 0.75);
+  --ink: #e2e8f0;
+  --muted: #94a3b8;
+
+  --good: #22c55e;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+
+  --fire: #ef4444;
+  --blade: #a3a3a3;
+  --storm: #38bdf8;
+  --money: #facc15;
+
+  --rarity-common: #94a3b8;
+  --rarity-rare: #38bdf8;
+  --rarity-epic: #a855f7;
+  --rarity-legendary: #fbbf24;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 18px;
+  --radius-pill: 999px;
+
+  --border-soft: 1px solid rgba(255, 255, 255, 0.12);
+  --border-strong: 1px solid rgba(255, 255, 255, 0.2);
+
+  --dur-fast: 150ms;
+  --dur-mid: 200ms;
+  --dur-overlay: 240ms;
+  --ease-default: ease-out;
+}
+```
+
+### 12.2 Przycisk bazowy + warianty
+
+```css
+.btn {
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 10px 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(180deg, #334155, #1e293b);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+  transition: transform var(--dur-fast) var(--ease-default), opacity var(--dur-fast) var(--ease-default);
+}
+
+.btn:active { transform: translateY(1px); }
+.btn[disabled], .btn.is-locked { opacity: 0.45; pointer-events: none; }
+
+.btn--fire { background: linear-gradient(180deg, #ef4444, #b91c1c); }
+.btn--blade { background: linear-gradient(180deg, #9ca3af, #4b5563); }
+.btn--storm { background: linear-gradient(180deg, #38bdf8, #0369a1); }
+.btn--boss { background: linear-gradient(180deg, #f59e0b, #b45309); }
+.btn--mut { background: linear-gradient(180deg, #22c55e, #166534); }
+```
+
+### 12.3 Panel HUD
+
+```css
+.hud {
+  background: var(--panel);
+  border: var(--border-soft);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  font-size: 14px;
+  backdrop-filter: blur(3px);
+}
+
+.hud__line { display: flex; justify-content: space-between; gap: 8px; }
+.hud__money { color: var(--money); font-weight: 700; }
+.hud__xp { color: var(--rarity-epic); font-weight: 700; }
+.hud__hp { color: #fca5a5; }
+```
+
+### 12.4 Modal/overlay
+
+```css
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgba(2, 6, 23, 0.92);
+  backdrop-filter: blur(8px);
+}
+
+.modal {
+  width: min(560px, 100%);
+  border-radius: var(--radius-xl);
+  border: var(--border-strong);
+  background: rgba(15, 23, 42, 0.9);
+  padding: 18px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  animation: modalIn var(--dur-overlay) var(--ease-default);
+}
+```
+
+### 12.5 Snippet JS - mapa telegraph shape
+
+```js
+const TELEGRAPH_SHAPE = {
+  aoe: 'square',
+  dash: 'triangle',
+  projectile: 'circle',
+  special: 'hexagon'
+};
+
+const TELEGRAPH_COLOR = {
+  square: '#ef4444',
+  triangle: '#fbbf24',
+  circle: '#38bdf8',
+  hexagon: '#a855f7'
+};
+```
