@@ -268,6 +268,7 @@
       <div class="line"><span>XP:</span><strong class="xp" id="xp">0</strong></div>
       <div class="line"><span>Moc:</span><strong id="activePower">Podstawowa</strong></div>
       <div class="line"><span>Fala:</span><strong class="quest" id="quest">1 (2 potwory)</strong></div>
+      <div class="line"><span>Swiat:</span><strong id="worldInfo" style="color:#94a3b8;">-</strong></div>
       <div class="line"><span>Mutacja:</span><strong id="mutInfo">Koszt 120</strong></div>
       <div class="line"><span>Tarcza:</span><strong id="shieldStatus" style="color:#64748b;">NIEAKTYWNA</strong></div>
       <div class="line"><span>Boss:</span><strong id="bossState">Brak</strong></div>
@@ -337,6 +338,148 @@
 
     const RUN_STORAGE_KEY = "mutacje_essence_v1";
 
+    const WORLDS = [
+      { id: "fire", name: "Popielna Kuznia", color: "#ef4444", bg: "linear-gradient(#1a0a0a 0%, #2d1111 50%, #0f0808 100%)", waves: [1,2], enemyPalette: 1 },
+      { id: "blade", name: "Zelazne Pogranicze", color: "#9ca3af", bg: "linear-gradient(#1a1a1a 0%, #2d2d2d 50%, #0f0f0f 100%)", waves: [3,4], enemyPalette: 0 },
+      { id: "storm", name: "Sztormowe Iglice", color: "#38bdf8", bg: "linear-gradient(#0a1a2a 0%, #112233 50%, #050a10 100%)", waves: [5,6], enemyPalette: 2 },
+      { id: "mutation", name: "Mutageniczne Mokradla", color: "#22c55e", bg: "linear-gradient(#0a1a0a 0%, #112211 50%, #050a05 100%)", waves: [7,8], enemyPalette: 0 },
+      { id: "gold", name: "Zlote Katakumby", color: "#fbbf24", bg: "linear-gradient(#1a1608 0%, #2d2611 50%, #0f0b04 100%)", waves: [9,10], enemyPalette: 1 }
+    ];
+
+    function getWorldForWave(wave) {
+      for (let i = WORLDS.length - 1; i >= 0; i--) {
+        if (wave >= WORLDS[i].waves[0]) return WORLDS[i];
+      }
+      return WORLDS[0];
+    }
+
+    const WORLD_DROPS = {
+      fire: [
+        { id: "fire_shard", name: "Zarowy Odlamek", rarity: "common", min: 1, max: 2 },
+        { id: "lava_core", name: "Rdzen Lawy", rarity: "rare", min: 1, max: 1 },
+        { id: "eruptor_heart", name: "Serce Eruptora", rarity: "epic", min: 1, max: 1 }
+      ],
+      blade: [
+        { id: "steel_nail", name: "Stalowy Nit", rarity: "common", min: 1, max: 2 },
+        { id: "veteran_blade", name: "Ostrze Weterana", rarity: "rare", min: 1, max: 1 },
+        { id: "forge_seal", name: "Pieczec Kuzni", rarity: "epic", min: 1, max: 1 }
+      ],
+      storm: [
+        { id: "cloud_spark", name: "Iskra Chmur", rarity: "common", min: 1, max: 2 },
+        { id: "storm_capacitor", name: "Kondensator Burzy", rarity: "rare", min: 1, max: 1 },
+        { id: "thunder_crown", name: "Korona Piorunow", rarity: "epic", min: 1, max: 1 }
+      ],
+      mutation: [
+        { id: "mutagen_slime", name: "Sluz Mutagenu", rarity: "common", min: 1, max: 2 },
+        { id: "unstable_genome", name: "Niestabilny Genom", rarity: "rare", min: 1, max: 1 },
+        { id: "chimera_matrix", name: "Matryca Chimery", rarity: "epic", min: 1, max: 1 }
+      ],
+      gold: [
+        { id: "ancient_coin", name: "Pradawna Moneta", rarity: "common", min: 1, max: 3 },
+        { id: "shadow_contract", name: "Kontrakt Cieni", rarity: "rare", min: 1, max: 1 },
+        { id: "vault_relic", name: "Relikwia Skarbca", rarity: "epic", min: 1, max: 1 }
+      ]
+    };
+
+    const WORLD_MUTATIONS = {
+      fire: [
+        { id: "fire_crit", name: "Plomien Krytyczny", tags: ["fire", "attack"], rarity: "common", desc: "+12% szans na burn (3s)", effect: { burnChance: 0.12, burnDmg: 1, burnDur: 3000 } },
+        { id: "basalt_skin", name: "Skora Bazaltowa", tags: ["fire", "defense"], rarity: "rare", desc: "-20% obrazen od ognia", effect: { fireResist: 0.20 } },
+        { id: "afterburn", name: "Afterburn", tags: ["fire", "attack"], rarity: "epic", desc: "Wybuch po smierci wroga (60px, 14dmg)", effect: { afterburnRng: 60, afterburnDmg: 14 } }
+      ],
+      blade: [
+        { id: "counter_master", name: "Mistrz Kontry", tags: ["blade", "defense"], rarity: "common", desc: "Okno 220ms na kontratak +40%", effect: { counterWindow: 220, counterBonus: 1.4 } },
+        { id: "cutting_aura", name: "Tnaca Aura", tags: ["blade", "defense"], rarity: "rare", desc: "Aura 55px, 3dmg/0.6s", effect: { auraRng: 55, auraDmg: 3, auraTick: 600 } },
+        { id: "segment_armor", name: "Pancerz Segmentowy", tags: ["blade", "defense"], rarity: "epic", desc: "35% redukcji przez 1.8s po trafieniu", effect: { armorReduct: 0.35, armorDur: 1800, armorCd: 10000 } }
+      ],
+      storm: [
+        { id: "chain_strike", name: "Lancuch Uderzen", tags: ["storm", "attack"], rarity: "common", desc: "Luk/melee przeskakuja na 1 cel (0.7x)", effect: { chainCount: 1, chainMul: 0.7 } },
+        { id: "superconductor", name: "Nadprzewodnik", tags: ["storm", "mobility"], rarity: "rare", desc: "-20% kosztu luku, wolniejszy drain tarczy", effect: { bowCostMul: 0.8, shieldTick: 150 } },
+        { id: "faraday_dash", name: "Faraday Dash", tags: ["storm", "defense"], rarity: "epic", desc: "Dash daje 30 tarczy na 1s", effect: { dashShield: 30, dashDur: 1000, dashCd: 6000 } }
+      ],
+      mutation: [
+        { id: "random_booster", name: "Losowy Booster", tags: ["mutation", "attack"], rarity: "common", desc: "Fala: losowy +10% do dmg/speed/xp", effect: { randomBoost: 0.1 } },
+        { id: "tissue_regen", name: "Regeneracja Tkanek", tags: ["mutation", "defense"], rarity: "rare", desc: "Streak 5 kill: +1 serce", effect: { regenStreak: 5, regenCd: 12000 } },
+        { id: "adaptation", name: "Adaptacja", tags: ["mutation", "defense"], rarity: "epic", desc: "45% odpornosci na ostatni dmg (3s)", effect: { adaptResist: 0.45, adaptDur: 3000 } }
+      ],
+      gold: [
+        { id: "gambler", name: "Hazardzista", tags: ["gold", "attack"], rarity: "common", desc: "+18% monet, +10% dmg od wrogow", effect: { coinGain: 0.18, dmgTaken: 1.10 } },
+        { id: "interest", name: "Odsetki", tags: ["gold", "defense"], rarity: "rare", desc: "+8% monet na koniec fali (max 45)", effect: { interestRate: 0.08, interestCap: 45 } },
+        { id: "golden_shield", name: "Zlota Tarcza", tags: ["gold", "defense"], rarity: "epic", desc: "15% monet = tarcza (max 120)", effect: { coinShield: 0.15, shieldCap: 120 } }
+      ]
+    };
+
+    const WORLD_RARITY_ODDS = [
+      { common: 72, rare: 24, epic: 4 },
+      { common: 72, rare: 24, epic: 4 },
+      { common: 64, rare: 30, epic: 6 },
+      { common: 56, rare: 34, epic: 10 },
+      { common: 48, rare: 38, epic: 14 }
+    ];
+
+    const WORLD_BOSSES = {
+      fire: { name: "Krol Zaru", hp: 180, color: "#ef4444", speed: 0.85, contactDmg: 2,
+        attacks: [
+          { name: "Fala Ognia", telegraph: 850, width: 180, damage: 2, cooldown: 5000 },
+          { name: "Deszcz Meteorytow", telegraph: 1100, hits: 3, damagePerHit: 1, cooldown: 8500 },
+          { name: "Plonacy Szarz", telegraph: 500, dashDist: 260, damage: 2, cooldown: 7000 }
+        ],
+        phases: [
+          { hpMin: 70, cdMul: 1.0 },
+          { hpMin: 35, cdMul: 0.85, lavaCracks: true },
+          { hpMin: 0, cdMul: 0.85, lavaCracks: true, tickDmg: 1, tickInt: 1200 }
+        ]
+      },
+      blade: { name: "General Ostrzy", hp: 230, color: "#9ca3af", speed: 0.95, contactDmg: 2,
+        attacks: [
+          { name: "Wir Kling", telegraph: 650, radius: 90, damage: 2, duration: 1800, cooldown: 6000 },
+          { name: "Rykoszet", telegraph: 1600, reflectMul: 1.25, cooldown: 9000 },
+          { name: "Doskok Egzekutora", telegraph: 400, dashDist: 220, damage: 2, slow: 600, cooldown: 5500 }
+        ],
+        phases: [
+          { hpMin: 60, cdMul: 1.0, traps: false },
+          { hpMin: 25, cdMul: 1.0, traps: true, trapInt: 10000, trapDur: 2200 },
+          { hpMin: 0, cdMul: 1.0, traps: true, bleedDmg: 1, bleedInt: 2500 }
+        ]
+      },
+      storm: { name: "Wladca Burzy", hp: 290, color: "#38bdf8", speed: 1.0, contactDmg: 3,
+        attacks: [
+          { name: "Znaczniki Pioruna", telegraph: 1200, markers: 2, damage: 2, cooldown: 6500 },
+          { name: "Lancuch Blyskawic", telegraph: 800, jumps: 3, jumpRng: 180, damage: 1, cooldown: 7500 },
+          { name: "Skok Burzowy", telegraph: 450, shockwaveRng: 120, damage: 2, cooldown: 8000 }
+        ],
+        phases: [
+          { hpMin: 65, cdMul: 1.0, teleportChance: 0.3 },
+          { hpMin: 30, cdMul: 0.82, teleportChance: 0.5 },
+          { hpMin: 0, cdMul: 0.82, telegraphReduced: 850 }
+        ]
+      },
+      mutation: { name: "Hydra Genow", hp: 360, color: "#22c55e", speed: 0.9, contactDmg: 3,
+        attacks: [
+          { name: "Plucie Mutagenem", telegraph: 900, pools: 2, poolDur: 7000, cooldown: 6000 },
+          { name: "Losowa Adaptacja", telegraph: 500, rotationTime: 20000, cooldown: 20000 },
+          { name: "Rozszczepienie", telegraph: 700, summons: 2, summonHp: 42, summonDur: 12000, cooldown: 12000 }
+        ],
+        phases: [
+          { hpMin: 70, cdMul: 1.0 },
+          { hpMin: 40, cdMul: 1.0, dmgReduct: 0.15 },
+          { hpMin: 0, cdMul: 0.75, summonCdMul: 0.75 }
+        ]
+      },
+      gold: { name: "Poborca Cieni", hp: 460, color: "#fbbf24", speed: 1.05, contactDmg: 3,
+        attacks: [
+          { name: "Podatek Krwi", telegraph: 700, stealPct: 0.12, minSteal: 8, maxSteal: 60, bonusDmgThresh: 40, cooldown: 6800 },
+          { name: "Dluznicy", telegraph: 800, summons: 3, summonHp: 34, summonDmg: 1, cooldown: 9500 },
+          { name: "Pieczec Chciwosci", telegraph: 900, dmgByCoins: [[0,1],[150,2],[300,3]], cooldown: 8200 }
+        ],
+        phases: [
+          { hpMin: 75, cdMul: 1.0, debtStacks: false },
+          { hpMin: 35, cdMul: 1.0, debtStacks: true, debtPerHit: 0.05, maxDebt: 4, debtDur: 10000 },
+          { hpMin: 0, cdMul: 1.0, debtStacks: true, summonCdMul: 0.7, maxSteal: 80 }
+        ]
+      }
+    };
+
     const state = {
       w: 0,
       h: 0,
@@ -392,6 +535,15 @@
         chestsOpened: 0,
         kills: 0
       },
+      inventory: {
+        fire_shard: 0, lava_core: 0, eruptor_heart: 0,
+        steel_nail: 0, veteran_blade: 0, forge_seal: 0,
+        cloud_spark: 0, storm_capacitor: 0, thunder_crown: 0,
+        mutagen_slime: 0, unstable_genome: 0, chimera_matrix: 0,
+        ancient_coin: 0, shadow_contract: 0, vault_relic: 0
+      },
+      currentWorld: null,
+      lastDmgType: null,
       sound: {
         enabled: true,
         ctx: null,
@@ -483,19 +635,25 @@
 
     function getMutationChoices(count) {
       const pool = [];
-      const totalWeight = Object.values(MUTATION_RARITIES).reduce((sum, r) => sum + r.weight, 0);
+      const worldIdx = WORLDS.indexOf(state.currentWorld);
+      const odds = worldIdx >= 0 ? WORLD_RARITY_ODDS[worldIdx] : WORLD_RARITY_ODDS[0];
+      const worldMutations = WORLD_MUTATIONS[state.currentWorld ? state.currentWorld.id : "fire"];
+      const globalPool = MUTATIONS_DB;
+      
       for (let i = 0; i < count; i++) {
-        let r = Math.random() * totalWeight;
+        const roll = Math.random() * 100;
         let rarity = "common";
-        for (const [key, data] of Object.entries(MUTATION_RARITIES)) {
-          r -= data.weight;
-          if (r <= 0) { rarity = key; break; }
+        if (roll > odds.common + odds.rare) rarity = "epic";
+        else if (roll > odds.common) rarity = "rare";
+        
+        let candidates = (worldMutations || []).filter(m => m.rarity === rarity);
+        if (candidates.length === 0) {
+          candidates = globalPool.filter(m => m.rarity === rarity);
         }
-        const candidates = MUTATIONS_DB.filter(m => m.rarity === rarity);
         if (candidates.length > 0) {
           pool.push(candidates[Math.floor(Math.random() * candidates.length)]);
         } else {
-          pool.push(MUTATIONS_DB[Math.floor(Math.random() * MUTATIONS_DB.length)]);
+          pool.push(globalPool[Math.floor(Math.random() * globalPool.length)]);
         }
       }
       return pool;
@@ -564,6 +722,8 @@
       state.lastDamage = 0;
       state.stats.kills = 0;
       state.stats.chestsOpened = 0;
+      state.currentWorld = WORLDS[0];
+      state.lastDmgType = null;
       enemyWave.wave = 1;
       enemyWave.spawned = 0;
       enemyWave.enemiesInWave = 2;
@@ -598,6 +758,10 @@
     function endRun(victory) {
       state.run.phase = victory ? "reward" : "gameover";
       state.run.endedAt = performance.now();
+      if (!victory) {
+        state.run.activeMutations = [];
+        state.run.activeSynergies = [];
+      }
       const seconds = Math.max(1, Math.floor((state.run.endedAt - state.run.startedAt) / 1000));
       const gain = Math.floor(enemyWave.wave * 6 + state.stats.kills * 2 + (victory ? 80 : 20));
       state.run.essence += gain;
@@ -613,21 +777,30 @@
     function spawnRunBoss(tier) {
       if (state.boss) return;
       const mini = tier === "mini";
+      const world = state.currentWorld || WORLDS[mini ? 2 : 4];
+      const bossData = WORLD_BOSSES[world.id];
       state.boss = {
         kind: mini ? "mini" : "final",
-        name: mini ? "Straznik Areny" : "Arcymistrz Mutacji",
+        worldId: world.id,
+        name: bossData.name,
         x: state.w - 120,
         y: state.groundY - 82,
         w: mini ? 68 : 76,
         h: mini ? 82 : 92,
-        hp: mini ? 180 : 320,
-        maxHp: mini ? 180 : 320,
-        color: mini ? "#fb7185" : "#f97316",
+        hp: mini ? Math.floor(bossData.hp * 0.6) : bossData.hp,
+        maxHp: mini ? Math.floor(bossData.hp * 0.6) : bossData.hp,
+        color: bossData.color,
+        speed: bossData.speed,
+        contactDmg: bossData.contactDmg,
+        attacks: bossData.attacks,
+        phase: 0,
+        phaseHp: bossData.phases[0],
+        attackTimer: 0,
         reward: null,
         hitCd: 0,
         runTier: tier
       };
-      toast(mini ? "MINI BOSS: Straznik Areny!" : "FINAL BOSS: Arcymistrz Mutacji!");
+      toast(mini ? `MINI BOSS: ${bossData.name}!` : `FINAL BOSS: ${bossData.name}!`);
       playTone(mini ? 130 : 90, 260, "sawtooth", 0.06);
     }
 
@@ -761,6 +934,12 @@
       const phaseTag = state.run.phase === "running" ? "RUN" : state.run.phase.toUpperCase();
       questEl.textContent = `${phaseTag} Fala ${enemyWave.wave} (${queue} w kolejce)`;
       
+      const worldInfoEl = document.getElementById("worldInfo");
+      if (state.currentWorld) {
+        worldInfoEl.textContent = state.currentWorld.name;
+        worldInfoEl.style.color = state.currentWorld.color;
+      }
+      
       const mutCount = (state.run.activeMutations || []).length;
       const synCount = (state.run.activeSynergies || []).length;
       if (state.run.phase === "running" && (mutCount > 0 || synCount > 0)) {
@@ -812,10 +991,18 @@
 
     function spawnEnemy() {
       const wave = enemyWave.wave;
+      const world = state.currentWorld || WORLDS[0];
+      if (world && enemyWave.wave >= world.waves[0] && enemyWave.wave <= world.waves[1]) {
+        state.currentWorld = world;
+      } else {
+        const newWorld = getWorldForWave(wave);
+        if (newWorld !== state.currentWorld) {
+          state.currentWorld = newWorld;
+          toast(`>>> WEJSCIE DO: ${newWorld.name.toUpperCase()}! <<<`);
+        }
+      }
       const sizeTier = Math.min(3, 1 + Math.floor((wave - 1) / 3));
-      const colorTier = Math.min(3, 1 + Math.floor((wave - 1) / 2));
-      const size = enemySizes[Math.floor(Math.random() * sizeTier)];
-      const palette = enemyPalettes[Math.floor(Math.random() * colorTier)];
+      const palette = enemyPalettes[state.currentWorld ? state.currentWorld.enemyPalette : 0];
       const typeIdx = Math.min(enemyTypes.length - 1, Math.floor((wave - 1) / 2));
       const enemyType = enemyTypes[typeIdx];
       const hp = Math.floor((14 + wave * 2.5) * size.hpMul);
@@ -853,9 +1040,20 @@
     }
 
     function spawnChest() {
+      const isHeal = Math.random() < 0.22;
       const x = 40 + Math.random() * (state.w - 80);
-      state.chests.push({ x, y: state.groundY - 24, w: 24, h: 24 });
-      toast("Pojawila sie skrzynka!");
+      state.chests.push({ 
+        x, 
+        y: state.groundY - 24, 
+        w: 24, 
+        h: 24,
+        type: isHeal ? "heal" : "coin"
+      });
+      if (isHeal) {
+        toast("Zielona skrzynka - LECZENIE!");
+      } else {
+        toast("Pojawila sie skrzynka!");
+      }
     }
 
     function spawnBoss(kind) {
@@ -1080,7 +1278,7 @@
       }
 
       state.coins -= cost;
-      addCoins(0, "mutacja");
+      updateHud();
 
       const haveFire = state.unlocked.fire;
       const haveBlade = state.unlocked.blade;
@@ -1156,6 +1354,8 @@
             playTone(600, 60, "sine", 0.05);
             e.x -= 15;
             toast("BLOKADA!");
+            e.hitCd = 30;
+            continue;
           } else {
             const dmg = 1 + (e.elite ? 2 : 0) + waveDmg;
             state.currentHearts = Math.max(0, state.currentHearts - dmg);
@@ -1183,6 +1383,7 @@
             playTone(500, 80, "sine", 0.06);
             b.x -= 25;
             toast("BLOKADA BOSS!");
+            b.hitCd = 40;
           } else {
             state.currentHearts = Math.max(0, state.currentHearts - 3);
             b.hitCd = 40;
@@ -1229,6 +1430,20 @@
         addXp(15 * kills, "kill", state.w - 60, state.groundY - 30);
         
         killedEnemies.forEach(e => {
+          const worldId = state.currentWorld ? state.currentWorld.id : "fire";
+          const drops = WORLD_DROPS[worldId];
+          if (drops) {
+            const roll = Math.random() * 100;
+            let drop = null;
+            if (roll < 8) drop = drops.find(d => d.rarity === "epic");
+            else if (roll < 35) drop = drops.find(d => d.rarity === "rare");
+            else if (roll < 65) drop = drops.find(d => d.rarity === "common");
+            if (drop) {
+              const qty = drop.min + Math.floor(Math.random() * (drop.max - drop.min + 1));
+              state.inventory[drop.id] = (state.inventory[drop.id] || 0) + qty;
+              toast(`+${qty} ${drop.name}!`);
+            }
+          }
           const typeName = e.enemyType || "potwor";
           const msg = e.elite ? killMessages.elite[Math.floor(Math.random() * killMessages.elite.length)] : killMessages.basic[Math.floor(Math.random() * killMessages.basic.length)];
           const name = e.className ? `${e.className} ${e.title}` : `${e.title} ${typeName}`;
@@ -1282,7 +1497,18 @@
 
       state.chests = state.chests.filter(c => {
         if (rectHit(p, c)) {
-          addCoins(20, "skrzynka");
+          if (c.type === "heal") {
+            if (state.currentHearts < state.maxHearts) {
+              state.currentHearts++;
+              playTone(900, 150, "triangle", 0.05);
+              toast("+1 SERCE! (skrzynka lecznica)");
+            } else {
+              addCoins(10, "pełne zycie");
+              toast("Max HP! Zamiast tego +10 monet");
+            }
+          } else {
+            addCoins(20, "skrzynka");
+          }
           state.stats.chestsOpened++;
           playTone(720, 100, "triangle", 0.03);
           return false;
@@ -1464,14 +1690,29 @@
     }
 
     function drawChestSprite(c) {
-      ctx.fillStyle = "#92400e";
-      ctx.fillRect(c.x, c.y + 4, c.w, c.h - 4);
-      ctx.fillStyle = "#f59e0b";
-      ctx.fillRect(c.x + 1, c.y, c.w - 2, 10);
-      ctx.fillStyle = "#78350f";
-      ctx.fillRect(c.x + 5, c.y + 11, c.w - 10, 5);
-      ctx.fillStyle = "#fde68a";
-      ctx.fillRect(c.x + c.w / 2 - 2, c.y + 10, 4, 8);
+      if (c.type === "heal") {
+        ctx.fillStyle = "#166534";
+        ctx.fillRect(c.x, c.y + 4, c.w, c.h - 4);
+        ctx.fillStyle = "#22c55e";
+        ctx.fillRect(c.x + 1, c.y, c.w - 2, 10);
+        ctx.fillStyle = "#14532d";
+        ctx.fillRect(c.x + 5, c.y + 11, c.w - 10, 5);
+        ctx.fillStyle = "#86efac";
+        ctx.fillRect(c.x + c.w / 2 - 3, c.y + 9, 6, 10);
+        ctx.fillStyle = "#ef4444";
+        ctx.beginPath();
+        ctx.arc(c.x + c.w / 2, c.y + 4, 3, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillStyle = "#92400e";
+        ctx.fillRect(c.x, c.y + 4, c.w, c.h - 4);
+        ctx.fillStyle = "#f59e0b";
+        ctx.fillRect(c.x + 1, c.y, c.w - 2, 10);
+        ctx.fillStyle = "#78350f";
+        ctx.fillRect(c.x + 5, c.y + 11, c.w - 10, 5);
+        ctx.fillStyle = "#fde68a";
+        ctx.fillRect(c.x + c.w / 2 - 2, c.y + 10, 4, 8);
+      }
     }
 
     function drawBossSprite(b) {
@@ -1501,14 +1742,21 @@
         ctx.fillRect(0, 0, state.w, state.h);
       }
 
+      const world = state.currentWorld || WORLDS[0];
+      let bgColors = ["#0f2a47", "#123a5f", "#0b1527"];
+      if (world && world.bg) {
+        const matches = world.bg.match(/#[a-f0-9]{6}/gi);
+        if (matches) bgColors = matches.slice(0, 3);
+      }
       const sky = ctx.createLinearGradient(0, 0, 0, state.h);
-      sky.addColorStop(0, "#0f2a47");
-      sky.addColorStop(0.6, "#123a5f");
-      sky.addColorStop(1, "#0b1527");
+      sky.addColorStop(0, bgColors[0]);
+      sky.addColorStop(0.6, bgColors[1]);
+      sky.addColorStop(1, bgColors[2]);
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, state.w, state.h);
 
-      ctx.fillStyle = "rgba(251,191,36,0.26)";
+      const moonColor = world && world.color ? world.color + "40" : "rgba(251,191,36,0.26)";
+      ctx.fillStyle = moonColor;
       ctx.beginPath();
       ctx.arc(state.w - 56, 42, 24, 0, Math.PI * 2);
       ctx.fill();
