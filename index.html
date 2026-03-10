@@ -23,13 +23,20 @@
       --money: #facc15;
     }
 
-    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
     html, body {
       margin: 0;
       padding: 0;
       width: 100%;
       height: 100%;
       overflow: hidden;
+      overscroll-behavior: none;
       font-family: "Trebuchet MS", "Segoe UI", sans-serif;
       color: var(--ink);
       background: radial-gradient(circle at 20% 20%, #334155, var(--bg1) 50%),
@@ -106,6 +113,7 @@
       grid-template-columns: 1fr 1fr;
       gap: 8px;
       min-height: 180px;
+      touch-action: none;
     }
 
     .pad, .actions {
@@ -133,6 +141,7 @@
       border: 0;
       border-radius: 10px;
       padding: 10px 8px;
+      min-height: 44px;
       color: #fff;
       font-weight: 700;
       font-size: 13px;
@@ -791,7 +800,9 @@
       particlePool: [],
       chests: [],
       boss: null,
+      arenaHazards: [],
       screenShake: 0,
+      hitStop: 0,
       debug: false,
       damageFlash: 0,
       lastDamage: 0,
@@ -1018,6 +1029,106 @@
       state.enemies.push(minion);
     }
 
+    function getBossPhase(boss) {
+      const def = WORLD_BOSSES[boss.worldId] || WORLD_BOSSES.fire;
+      const hpPct = boss.maxHp > 0 ? (boss.hp / boss.maxHp) * 100 : 0;
+      for (let i = 0; i < def.phases.length; i++) {
+        if (hpPct >= def.phases[i].hpMin) return { index: i, data: def.phases[i] };
+      }
+      return { index: def.phases.length - 1, data: def.phases[def.phases.length - 1] };
+    }
+
+    function clearArenaHazards() {
+      state.arenaHazards = [];
+    }
+
+    function applyHitStop(duration) {
+      state.hitStop = Math.max(state.hitStop, duration);
+    }
+
+    function spawnArenaHazard(type, data) {
+      state.arenaHazards.push({ type, life: data.life || 1800, pulse: 0, ...data });
+    }
+
+    function triggerBossSignatureMove(boss) {
+      if (!boss || boss.telegraphing) return;
+      const phase = getBossPhase(boss);
+      boss.phaseIndex = phase.index;
+      boss.phaseData = phase.data;
+      const attacks = boss.attacks || [];
+      const attack = attacks[boss.attackIndex % attacks.length] || attacks[0];
+      if (!attack) return;
+      boss.attackIndex = (boss.attackIndex || 0) + 1;
+      boss.telegraphing = attack.name;
+      boss.telegraphTimer = attack.telegraph || 700;
+      boss.telegraphMax = boss.telegraphTimer;
+      toast(`${boss.name}: ${attack.name}!`);
+      playTone(160, 120, "sawtooth", 0.05);
+    }
+
+    function resolveBossAttack(boss) {
+      if (!boss || !boss.telegraphing) return;
+      const attackName = boss.telegraphing;
+      const playerCx = state.player.x + state.player.w / 2;
+      if (boss.worldId === "fire") {
+        if (attackName === "Fala Ognia") {
+          spawnArenaHazard("fireLine", { x: 0, y: state.groundY - 18, w: state.w, h: 16, dmg: 2, life: 900 });
+        } else if (attackName === "Deszcz Meteorytow") {
+          for (let i = 0; i < 3; i++) {
+            const x = Math.max(30, Math.min(state.w - 30, playerCx + (i - 1) * 70));
+            spawnArenaHazard("meteor", { x, y: 28, r: 18, dmg: 1, life: 1200, targetY: state.groundY - 10 });
+          }
+        } else if (attackName === "Plonacy Szarz") {
+          boss.dashTimer = 420;
+          boss.dashSpeed = 4.8;
+        }
+      } else if (boss.worldId === "blade") {
+        if (attackName === "Wir Kling") {
+          spawnArenaHazard("bladeSpin", { x: boss.x + boss.w / 2, y: boss.y + boss.h / 2, r: 86, dmg: 2, life: 1600 });
+        } else if (attackName === "Rykoszet") {
+          for (let i = 0; i < 3; i++) {
+            state.bullets.push({ x: boss.x + boss.w / 2, y: boss.y + 24 + i * 16, vx: -3.8, vy: i === 1 ? 0 : (i === 0 ? -0.7 : 0.7), r: 6, dmg: 1, color: "#cbd5e1", life: 150, hostile: true, enemyRole: "boss" });
+          }
+        } else if (attackName === "Doskok Egzekutora") {
+          boss.dashTimer = 300;
+          boss.dashSpeed = 5.4;
+        }
+      } else if (boss.worldId === "storm") {
+        if (attackName === "Znaczniki Pioruna") {
+          for (let i = 0; i < 2; i++) {
+            const x = Math.max(30, Math.min(state.w - 30, playerCx + (i === 0 ? -55 : 55)));
+            spawnArenaHazard("lightningMark", { x, y: state.groundY - 18, r: 22, dmg: 2, life: 1000 });
+          }
+        } else if (attackName === "Lancuch Blyskawic") {
+          spawnArenaHazard("chain", { x1: boss.x + boss.w / 2, y1: boss.y + boss.h / 2, x2: playerCx, y2: state.player.y + state.player.h / 2, dmg: 1, life: 420 });
+        } else if (attackName === "Skok Burzowy") {
+          boss.jumpStrike = { targetX: playerCx - boss.w / 2, timer: 420, impact: false };
+        }
+      } else if (boss.worldId === "mutation") {
+        if (attackName === "Plucie Mutagenem") {
+          for (let i = 0; i < 2; i++) spawnArenaHazard("pool", { x: Math.max(30, Math.min(state.w - 30, playerCx + (i === 0 ? -60 : 60))), y: state.groundY - 12, r: 26, dmg: 1, life: 5000 });
+        } else if (attackName === "Losowa Adaptacja") {
+          boss.adaptBuffUntil = performance.now() + 5000;
+        } else if (attackName === "Rozszczepienie") {
+          spawnSummonMinion({ x: boss.x + 10, y: boss.y, palette: { ...enemyPalettes[0], body: boss.color, skin: boss.color } });
+          spawnSummonMinion({ x: boss.x + boss.w - 10, y: boss.y, palette: { ...enemyPalettes[0], body: boss.color, skin: boss.color } });
+        }
+      } else if (boss.worldId === "gold") {
+        if (attackName === "Podatek Krwi") {
+          const steal = Math.min(Math.max(8, Math.floor(state.coins * 0.12)), 60);
+          state.coins = Math.max(0, state.coins - steal);
+          toast(`Podatek Krwi! -${steal} monet`);
+        } else if (attackName === "Dluznicy") {
+          for (let i = 0; i < 3; i++) spawnSummonMinion({ x: boss.x + i * 8, y: boss.y, palette: { ...enemyPalettes[1], body: "#fbbf24", skin: "#f59e0b" } });
+        } else if (attackName === "Pieczec Chciwosci") {
+          spawnArenaHazard("seal", { x: playerCx, y: state.groundY - 14, r: 30, dmg: state.coins >= 300 ? 3 : state.coins >= 150 ? 2 : 1, life: 1200 });
+        }
+      }
+      boss.telegraphing = null;
+      boss.telegraphTimer = 0;
+      boss.telegraphMax = 0;
+    }
+
     function loadEssence() {
       const raw = localStorage.getItem(RUN_STORAGE_KEY);
       const num = Number(raw);
@@ -1127,6 +1238,7 @@
       state.particles = [];
       state.chests = [];
       state.boss = null;
+      clearArenaHazards();
       state.currentHearts = state.maxHearts;
       state.damageFlash = 0;
       state.lastDamage = 0;
@@ -1169,6 +1281,7 @@
     function endRun(victory) {
       state.run.phase = victory ? "reward" : "gameover";
       state.run.endedAt = performance.now();
+      clearArenaHazards();
       if (!victory) {
         state.run.activeMutations = [];
         state.run.activeSynergies = [];
@@ -1207,10 +1320,20 @@
         phase: 0,
         phaseHp: bossData.phases[0],
         attackTimer: 0,
+        attackIndex: 0,
+        telegraphing: null,
+        telegraphTimer: 0,
+        telegraphMax: 0,
+        dashTimer: 0,
+        dashSpeed: 0,
+        jumpStrike: null,
+        phaseIndex: 0,
+        phaseData: bossData.phases[0],
         reward: null,
         hitCd: 0,
         runTier: tier
       };
+      clearArenaHazards();
       toast(mini ? `MINI BOSS: ${bossData.name}!` : `FINAL BOSS: ${bossData.name}!`);
       playTone(mini ? 130 : 90, 260, "sawtooth", 0.06);
       if (state.sound.enabled) AudioManager.bossAppear(mini);
@@ -1467,26 +1590,42 @@
 
     function spawnBoss(kind) {
       if (state.boss) return toast("Najpierw pokonaj obecnego bossa");
+      const def = WORLD_BOSSES[kind];
       const map = {
-        fire: { name: "Ognik", hp: 120, color: "#ef4444", reward: "fire" },
-        blade: { name: "Mistrz Szabli", hp: 140, color: "#9ca3af", reward: "blade" },
-        storm: { name: "Burzak", hp: 150, color: "#38bdf8", reward: "storm" }
+        fire: { name: "Ognik", reward: "fire" },
+        blade: { name: "Mistrz Szabli", reward: "blade" },
+        storm: { name: "Burzak", reward: "storm" }
       };
       const b = map[kind];
       state.boss = {
         kind,
+        worldId: kind,
         name: b.name,
         x: state.w - 120,
         y: state.groundY - 76,
         w: 64,
         h: 76,
-        hp: b.hp,
-        maxHp: b.hp,
-        color: b.color,
+        hp: Math.floor(def.hp * 0.7),
+        maxHp: Math.floor(def.hp * 0.7),
+        color: def.color,
+        speed: def.speed,
+        contactDmg: def.contactDmg,
+        attacks: def.attacks,
+        attackTimer: 0,
+        attackIndex: 0,
+        telegraphing: null,
+        telegraphTimer: 0,
+        telegraphMax: 0,
+        dashTimer: 0,
+        dashSpeed: 0,
+        jumpStrike: null,
+        phaseIndex: 0,
+        phaseData: def.phases[0],
         reward: b.reward,
         hitCd: 0,
         runTier: "normal"
       };
+      clearArenaHazards();
       playTone(140, 280, "sawtooth", 0.05);
       if (state.sound.enabled) AudioManager.bossAppear(false);
       toast(`Boss ${b.name} wszedl na arene!`);
@@ -1511,6 +1650,9 @@
       const knockDir = state.player.dir;
       target.x += knockDir * 6;
       target.x = Math.max(0, Math.min(target.x, state.w - target.w));
+      const heavyHit = !!target.color || !!target.elite || dmg >= 16;
+      addScreenShake(heavyHit ? 5 : 2.5);
+      applyHitStop(heavyHit ? 70 : 35);
       for (let i = 0; i < 8; i++) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 1.5 + Math.random() * 2;
@@ -1525,6 +1667,29 @@
           size: 2 + Math.random() * 2
         });
       }
+      for (let i = 0; i < 4; i++) {
+        pushParticle({
+          x: target.x + target.w / 2 - knockDir * 4,
+          y: target.y + target.h / 2 + (Math.random() - 0.5) * 10,
+          vx: knockDir * (2.2 + Math.random() * 1.4),
+          vy: (Math.random() - 0.5) * 1.2,
+          life: 10 + Math.random() * 6,
+          color: target.color || "#f8fafc",
+          isImpactTrail: true,
+          size: heavyHit ? 4 : 3
+        });
+      }
+      pushParticle({
+        x: target.x + target.w / 2,
+        y: target.y + target.h * 0.7,
+        vx: 0,
+        vy: 0,
+        life: heavyHit ? 24 : 18,
+        color: target.color || "#ef4444",
+        isImpactDecal: true,
+        size: heavyHit ? 20 : 14,
+        dir: knockDir
+      });
     }
 
     function pushParticle(particle) {
@@ -2014,8 +2179,33 @@
         const bossCenterX = b.x + b.w / 2;
         const dist = bossCenterX - playerCenterX;
         const contactRange = p.w / 2 + b.w / 2 + 4;
-        if (Math.abs(dist) > contactRange) {
-          b.x += dist > 0 ? -0.8 : 0.8;
+        const phase = getBossPhase(b);
+        b.phaseIndex = phase.index;
+        b.phaseData = phase.data;
+        b.attackTimer -= dt;
+        if (b.telegraphTimer > 0) {
+          b.telegraphTimer -= dt;
+          if (b.telegraphTimer <= 0) resolveBossAttack(b);
+        } else if (b.attackTimer <= 0) {
+          triggerBossSignatureMove(b);
+          b.attackTimer = ((b.attacks[(b.attackIndex - 1 + b.attacks.length) % b.attacks.length] || {}).cooldown || 7000) * (phase.data.cdMul || 1);
+        }
+        if (b.jumpStrike) {
+          b.jumpStrike.timer -= dt;
+          b.x += (b.jumpStrike.targetX - b.x) * 0.14;
+          if (b.jumpStrike.timer <= 0 && !b.jumpStrike.impact) {
+            b.jumpStrike.impact = true;
+            spawnArenaHazard("shockwave", { x: b.x + b.w / 2, y: state.groundY - 8, r: 90, dmg: 2, life: 520 });
+            b.jumpStrike = null;
+          }
+        }
+        if (b.dashTimer > 0) {
+          b.dashTimer -= dt;
+          const dashDir = dist > 0 ? -1 : 1;
+          b.x += dashDir * (b.dashSpeed || 4.5);
+        } else if (Math.abs(dist) > contactRange) {
+          const phaseSpeed = (phase.data.teleportChance && Math.random() < phase.data.teleportChance * 0.01) ? 2.4 : 0.8;
+          b.x += dist > 0 ? -phaseSpeed : phaseSpeed;
           b.x = Math.max(0, Math.min(b.x, state.w - b.w));
         }
         if (b.hitCd > 0) b.hitCd--;
@@ -2043,6 +2233,41 @@
           }
         }
       }
+
+      for (const hazard of state.arenaHazards) {
+        hazard.life -= dt;
+        hazard.pulse += dt;
+        if (hazard.type === "meteor") {
+          hazard.y += 3.2;
+          if (hazard.y >= hazard.targetY) {
+            spawnArenaHazard("blast", { x: hazard.x, y: hazard.targetY, r: 34, dmg: hazard.dmg, life: 260 });
+            hazard.life = 0;
+          }
+        }
+        let hitPlayer = false;
+        if (hazard.type === "fireLine") {
+          hitPlayer = rectHit({ x: state.player.x, y: state.player.y, w: state.player.w, h: state.player.h }, hazard);
+        } else if (["lightningMark", "pool", "seal", "shockwave", "blast", "bladeSpin"].includes(hazard.type)) {
+          const dx = state.player.x + state.player.w / 2 - hazard.x;
+          const dy = state.player.y + state.player.h / 2 - hazard.y;
+          hitPlayer = dx * dx + dy * dy <= (hazard.r || 0) * (hazard.r || 0);
+        } else if (hazard.type === "chain") {
+          hitPlayer = hazard.life > 250;
+        }
+        if (hitPlayer && now - state.lastDamage > 450) {
+          if (p.shieldActive && hazard.type !== "pool") {
+            state.lastDamage = now;
+            playTone(520, 60, "sine", 0.05);
+          } else {
+            state.currentHearts = Math.max(0, state.currentHearts - (hazard.dmg || 1));
+            state.lastDamage = now;
+            state.damageFlash = 10;
+            addScreenShake(4);
+            toast(`Mechanika areny! -${hazard.dmg || 1} SERCA`);
+          }
+        }
+      }
+      state.arenaHazards = state.arenaHazards.filter(h => h.life > 0);
 
       if (state.damageFlash > 0) state.damageFlash--;
 
@@ -2151,6 +2376,7 @@
           addXp(95, "mini boss", state.w / 2, state.groundY - 40);
           playTone(760, 180, "triangle", 0.05);
           toast(">>> Mini boss pokonany! Droga do finalu otwarta. <<<");
+          clearArenaHazards();
           state.boss = null;
           enemyWave.wave = Math.max(enemyWave.wave, 6);
           applyWaveTheme();
@@ -2161,6 +2387,7 @@
           playTone(760, 260, "triangle", 0.07);
           playTone(460, 320, "square", 0.07);
           toast(">>> FINAL BOSS POKONANY! <<<");
+          clearArenaHazards();
           state.boss = null;
           endRun(true);
           return;
@@ -2173,6 +2400,7 @@
           playTone(760, 180, "triangle", 0.05);
           playTone(440, 300, "square", 0.06);
           toast(`>>> ${state.boss.name} ${killMessages.boss[Math.floor(Math.random() * killMessages.boss.length)]} <<<`);
+          clearArenaHazards();
           state.boss = null;
         }
       }
@@ -2490,6 +2718,44 @@
     }
 
     function drawBossSprite(b) {
+      if (b.telegraphing && b.telegraphMax > 0) {
+        const pct = Math.max(0, Math.min(1, b.telegraphTimer / b.telegraphMax));
+        const alpha = 0.24 + (1 - pct) * 0.5;
+        const attack = b.telegraphing || "";
+        if (attack.includes("Szarz") || attack.includes("Doskok")) {
+          const dir = b.x < state.player.x ? 1 : -1;
+          drawTelegraph("line", b.color, alpha, {
+            x1: b.x + b.w / 2,
+            y1: b.y + b.h / 2,
+            x2: b.x + b.w / 2 + dir * 170,
+            y2: b.y + b.h / 2,
+            lineWidth: 4
+          });
+        } else if (attack.includes("Rykoszet") || attack.includes("Lancuch")) {
+          drawTelegraph("beam", b.color, alpha, {
+            x1: b.x + b.w / 2,
+            y1: b.y + b.h / 2,
+            x2: state.player.x + state.player.w / 2,
+            y2: state.player.y + state.player.h / 2,
+            lineWidth: 3
+          });
+        } else if (attack.includes("Rozszczepienie") || attack.includes("Dluznicy")) {
+          drawTelegraph("box", b.color, alpha, {
+            x: b.x - 16,
+            y: state.groundY - 34,
+            w: b.w + 32,
+            h: 30,
+            lineWidth: 3
+          });
+        } else {
+          drawTelegraph("ring", b.color, alpha, {
+            x: b.x + b.w / 2,
+            y: b.y + b.h / 2,
+            r: 46 + (1 - pct) * 18,
+            lineWidth: 4
+          });
+        }
+      }
       ctx.fillStyle = b.color;
       ctx.fillRect(b.x + 8, b.y + 12, b.w - 16, b.h - 14);
       ctx.fillStyle = "rgba(255,255,255,0.2)";
@@ -2505,6 +2771,44 @@
       ctx.fillRect(b.x, b.y - 10, b.w, 6);
       ctx.fillStyle = "#ef4444";
       ctx.fillRect(b.x, b.y - 10, (b.hp / b.maxHp) * b.w, 6);
+    }
+
+    function drawTelegraph(shape, color, alpha, data) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color + "22";
+      ctx.lineWidth = data.lineWidth || 3;
+      if (shape === "line") {
+        ctx.beginPath();
+        ctx.moveTo(data.x1, data.y1);
+        ctx.lineTo(data.x2, data.y2);
+        ctx.stroke();
+      } else if (shape === "beam") {
+        ctx.setLineDash([8, 6]);
+        ctx.beginPath();
+        ctx.moveTo(data.x1, data.y1);
+        ctx.lineTo(data.x2, data.y2);
+        ctx.stroke();
+      } else if (shape === "ring") {
+        ctx.beginPath();
+        ctx.arc(data.x, data.y, data.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape === "box") {
+        ctx.strokeRect(data.x, data.y, data.w, data.h);
+        ctx.fillRect(data.x, data.y, data.w, data.h);
+      } else if (shape === "diamond") {
+        ctx.beginPath();
+        ctx.moveTo(data.x, data.y - data.r);
+        ctx.lineTo(data.x + data.r, data.y);
+        ctx.lineTo(data.x, data.y + data.r);
+        ctx.lineTo(data.x - data.r, data.y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.restore();
     }
 
     function draw() {
@@ -2574,33 +2878,80 @@
       }
 
       drawPlayerSprite(state.player);
-      state.enemies.forEach(e => {
-        if (!e.telegraph || e.telegraph <= 0 || !e.telegraphMax) return;
-        const pct = Math.max(0, Math.min(1, e.telegraph / e.telegraphMax));
+      state.arenaHazards.forEach(hazard => {
         ctx.save();
-        ctx.globalAlpha = 0.2 + (1 - pct) * 0.45;
-        ctx.strokeStyle = e.roleColor || "#f8fafc";
-        ctx.lineWidth = 2;
-        if (e.intent === "charge") {
-          const dir = e.x < state.player.x ? 1 : -1;
+        if (hazard.type === "fireLine") {
+          ctx.fillStyle = "rgba(239,68,68,0.45)";
+          ctx.fillRect(hazard.x, hazard.y, hazard.w, hazard.h);
+        } else if (hazard.type === "meteor") {
+          ctx.fillStyle = "#fb923c";
           ctx.beginPath();
-          ctx.moveTo(e.x + e.w / 2, e.y + e.h / 2);
-          ctx.lineTo(e.x + e.w / 2 + dir * 120 * (1 - pct * 0.2), e.y + e.h / 2);
+          ctx.arc(hazard.x, hazard.y, hazard.r, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (hazard.type === "chain") {
+          ctx.strokeStyle = "rgba(56,189,248,0.8)";
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(hazard.x1, hazard.y1);
+          ctx.lineTo(hazard.x2, hazard.y2);
           ctx.stroke();
-        } else if (e.intent === "shoot") {
+        } else {
+          const colorMap = { lightningMark: "#38bdf8", pool: "#22c55e", seal: "#fbbf24", shockwave: "#38bdf8", blast: "#fb923c", bladeSpin: "#cbd5e1" };
+          ctx.strokeStyle = colorMap[hazard.type] || "#f8fafc";
+          ctx.fillStyle = (colorMap[hazard.type] || "#f8fafc") + "33";
           ctx.beginPath();
-          ctx.moveTo(e.x + e.w / 2, e.y + e.h / 2);
-          ctx.lineTo(state.player.x + state.player.w / 2, state.player.y + state.player.h / 2);
+          ctx.arc(hazard.x, hazard.y, hazard.r || 24, 0, Math.PI * 2);
+          ctx.fill();
           ctx.stroke();
-        } else if (e.intent === "buff") {
-          ctx.beginPath();
-          ctx.arc(e.x + e.w / 2, e.y + e.h / 2, 30 + (1 - pct) * 18, 0, Math.PI * 2);
-          ctx.stroke();
-        } else if (e.intent === "summon") {
-          ctx.beginPath();
-          ctx.strokeRect(e.x - 10, state.groundY - 28, e.w + 20, 24);
         }
         ctx.restore();
+      });
+      state.enemies.forEach(e => {
+        const elitePulse = e.elite ? 0.18 + Math.sin(performance.now() * 0.01) * 0.05 : 0;
+        if (e.elite) {
+          drawTelegraph("diamond", "#fde047", elitePulse, {
+            x: e.x + e.w / 2,
+            y: e.y + e.h / 2,
+            r: Math.max(e.w, e.h) * 0.72,
+            lineWidth: 2
+          });
+        }
+        if (!e.telegraph || e.telegraph <= 0 || !e.telegraphMax) return;
+        const pct = Math.max(0, Math.min(1, e.telegraph / e.telegraphMax));
+        const alpha = 0.22 + (1 - pct) * 0.5;
+        if (e.intent === "charge") {
+          const dir = e.x < state.player.x ? 1 : -1;
+          drawTelegraph("line", e.roleColor || "#f8fafc", alpha, {
+            x1: e.x + e.w / 2,
+            y1: e.y + e.h / 2,
+            x2: e.x + e.w / 2 + dir * 120 * (1 - pct * 0.2),
+            y2: e.y + e.h / 2,
+            lineWidth: 3
+          });
+        } else if (e.intent === "shoot") {
+          drawTelegraph("beam", e.roleColor || "#f8fafc", alpha, {
+            x1: e.x + e.w / 2,
+            y1: e.y + e.h / 2,
+            x2: state.player.x + state.player.w / 2,
+            y2: state.player.y + state.player.h / 2,
+            lineWidth: 2
+          });
+        } else if (e.intent === "buff") {
+          drawTelegraph("ring", e.roleColor || "#f8fafc", alpha, {
+            x: e.x + e.w / 2,
+            y: e.y + e.h / 2,
+            r: 30 + (1 - pct) * 18,
+            lineWidth: 3
+          });
+        } else if (e.intent === "summon") {
+          drawTelegraph("box", e.roleColor || "#f8fafc", alpha, {
+            x: e.x - 10,
+            y: state.groundY - 28,
+            w: e.w + 20,
+            h: 24,
+            lineWidth: 2
+          });
+        }
       });
       state.enemies.forEach(drawEnemySprite);
       state.chests.forEach(drawChestSprite);
@@ -2799,6 +3150,39 @@
           ctx.beginPath();
           ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
           ctx.fill();
+        } else if (p.isImpactTrail) {
+          const alpha = Math.max(0, p.life / 16);
+          ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.7})`;
+          ctx.lineWidth = (p.size || 3) + 1;
+          ctx.beginPath();
+          ctx.moveTo(p.x - p.vx * 2.4, p.y - p.vy * 2.4);
+          ctx.lineTo(p.x, p.y);
+          ctx.stroke();
+          ctx.strokeStyle = p.color;
+          ctx.lineWidth = p.size || 3;
+          ctx.beginPath();
+          ctx.moveTo(p.x - p.vx * 1.5, p.y - p.vy * 1.5);
+          ctx.lineTo(p.x, p.y);
+          ctx.stroke();
+        } else if (p.isImpactDecal) {
+          const alpha = Math.max(0, p.life / 24);
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate((p.dir || 1) * 0.35);
+          ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.55})`;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(-p.size * 0.6, -p.size * 0.25);
+          ctx.lineTo(p.size * 0.7, p.size * 0.15);
+          ctx.moveTo(-p.size * 0.45, p.size * 0.2);
+          ctx.lineTo(p.size * 0.45, -p.size * 0.3);
+          ctx.stroke();
+          ctx.strokeStyle = `rgba(239,68,68,${alpha * 0.5})`;
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.arc(0, 0, p.size * 0.45, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
         } else {
           ctx.fillStyle = p.color;
           ctx.fillRect(p.x, p.y, 2, 2);
@@ -2827,6 +3211,13 @@
     function loop(now) {
       const dt = now - last;
       last = now;
+
+      if (state.hitStop > 0) {
+        state.hitStop = Math.max(0, state.hitStop - dt);
+        draw();
+        requestAnimationFrame(loop);
+        return;
+      }
 
       if (state.run.phase === "running") {
         enemyWave.timer += dt;
@@ -2886,17 +3277,50 @@
       requestAnimationFrame(loop);
     }
 
+    const HAS_POINTER_EVENTS = "PointerEvent" in window;
+
     function bindHold(buttonId, key, value) {
       const btn = document.getElementById(buttonId);
-      const down = ev => { ev.preventDefault(); state.pressed[key] = value; };
-      const up = ev => { ev.preventDefault(); state.pressed[key] = false; };
-      btn.addEventListener("pointerdown", down);
-      btn.addEventListener("pointerup", up);
-      btn.addEventListener("pointerleave", up);
-      btn.addEventListener("pointercancel", up);
-      btn.addEventListener("touchstart", down, { passive: false });
-      btn.addEventListener("touchend", up, { passive: false });
-      btn.addEventListener("touchcancel", up, { passive: false });
+      const down = ev => {
+        ev.preventDefault();
+        if (state.run.phase !== "running") return;
+        state.pressed[key] = value;
+      };
+      const up = ev => {
+        ev.preventDefault();
+        state.pressed[key] = false;
+      };
+      if (HAS_POINTER_EVENTS) {
+        btn.addEventListener("pointerdown", down);
+        btn.addEventListener("pointerup", up);
+        btn.addEventListener("pointerleave", up);
+        btn.addEventListener("pointercancel", up);
+      } else {
+        btn.addEventListener("touchstart", down, { passive: false });
+        btn.addEventListener("touchend", up, { passive: false });
+        btn.addEventListener("touchcancel", up, { passive: false });
+      }
+    }
+
+    function bindPress(buttonId, onPress) {
+      const btn = document.getElementById(buttonId);
+      const handler = ev => {
+        ev.preventDefault();
+        if (state.run.phase !== "running") return;
+        onPress();
+      };
+      if (HAS_POINTER_EVENTS) {
+        btn.addEventListener("pointerdown", handler);
+      } else {
+        btn.addEventListener("touchstart", handler, { passive: false });
+      }
+    }
+
+    function clearTouchState() {
+      state.pressed.left = false;
+      state.pressed.right = false;
+      state.player.shieldKey = false;
+      state.player.shieldActive = false;
     }
 
     bindHold("leftBtn", "left", true);
@@ -2934,25 +3358,20 @@
       if (ev.code === "KeyE" || ev.code === "ShiftLeft" || ev.code === "ShiftRight") state.player.shieldKey = false;
     });
 
-    window.addEventListener("blur", () => {
-      state.pressed.left = false;
-      state.pressed.right = false;
-      state.player.shieldKey = false;
-      state.player.shieldActive = false;
+    window.addEventListener("blur", clearTouchState);
+    window.addEventListener("pagehide", clearTouchState);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) clearTouchState();
     });
 
-    document.getElementById("jumpBtn").addEventListener("pointerdown", ev => {
-      ev.preventDefault();
-      if (state.run.phase !== "running") return;
+    bindPress("jumpBtn", () => {
       if (state.player.jumpsLeft > 0) {
         state.player.vy = state.player.jump;
         state.player.jumpsLeft--;
       }
     });
 
-    document.getElementById("attackBtn").addEventListener("pointerdown", ev => {
-      ev.preventDefault();
-      if (state.run.phase !== "running") return;
+    bindPress("attackBtn", () => {
       attack();
     });
 
@@ -2982,18 +3401,26 @@
       if (state.run.phase !== "running") return;
       useBow();
     });
-    document.getElementById("skillShield").addEventListener("pointerdown", ev => {
+    const shieldBtn = document.getElementById("skillShield");
+    const shieldDown = ev => {
       ev.preventDefault();
       if (state.run.phase !== "running") return;
       state.player.shieldKey = true;
-    });
-    document.getElementById("skillShield").addEventListener("pointerup", ev => {
+    };
+    const shieldUp = ev => {
       ev.preventDefault();
       state.player.shieldKey = false;
-    });
-    document.getElementById("skillShield").addEventListener("pointerleave", ev => {
-      state.player.shieldKey = false;
-    });
+    };
+    if (HAS_POINTER_EVENTS) {
+      shieldBtn.addEventListener("pointerdown", shieldDown);
+      shieldBtn.addEventListener("pointerup", shieldUp);
+      shieldBtn.addEventListener("pointerleave", shieldUp);
+      shieldBtn.addEventListener("pointercancel", shieldUp);
+    } else {
+      shieldBtn.addEventListener("touchstart", shieldDown, { passive: false });
+      shieldBtn.addEventListener("touchend", shieldUp, { passive: false });
+      shieldBtn.addEventListener("touchcancel", shieldUp, { passive: false });
+    }
 
     document.getElementById("soundBtn").addEventListener("click", () => {
       state.sound.enabled = !state.sound.enabled;
@@ -3050,7 +3477,11 @@
         startBGM();
       }
     };
-    document.addEventListener("pointerdown", startBgmOnce, { once: true });
+    if (HAS_POINTER_EVENTS) {
+      document.addEventListener("pointerdown", startBgmOnce, { once: true });
+    } else {
+      document.addEventListener("touchstart", startBgmOnce, { once: true, passive: true });
+    }
     document.addEventListener("keydown", startBgmOnce, { once: true });
     
     requestAnimationFrame(loop);
