@@ -500,7 +500,16 @@
         shieldActive: false,
         shieldKey: false,
         shieldTick: 0,
-        jumpsLeft: 1
+        jumpsLeft: 1,
+        wasOnGround: true,
+        animState: "idle",
+        animTimer: 0,
+        legAngle: 0,
+        armAngle: 0,
+        breathScale: 1,
+        breathDir: 1,
+        landSquish: 0,
+        runCycle: 0
       },
       pressed: { left: false, right: false },
       activePower: "basic",
@@ -1002,6 +1011,7 @@
         }
       }
       const sizeTier = Math.min(3, 1 + Math.floor((wave - 1) / 3));
+      const size = enemySizes[Math.floor(Math.random() * sizeTier)];
       const palette = enemyPalettes[state.currentWorld ? state.currentWorld.enemyPalette : 0];
       const typeIdx = Math.min(enemyTypes.length - 1, Math.floor((wave - 1) / 2));
       const enemyType = enemyTypes[typeIdx];
@@ -1075,7 +1085,8 @@
         maxHp: b.hp,
         color: b.color,
         reward: b.reward,
-        hitCd: 0
+        hitCd: 0,
+        runTier: "normal"
       };
       playTone(140, 280, "sawtooth", 0.05);
       toast(`Boss ${b.name} wszedl na arene!`);
@@ -1095,14 +1106,36 @@
 
     function dealDamage(target, dmg) {
       target.hp -= dmg;
-      for (let i = 0; i < 6; i++) {
+      target.hitFlash = 8;
+      const knockDir = state.player.dir;
+      target.x += knockDir * 6;
+      for (let i = 0; i < 8; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1.5 + Math.random() * 2;
         state.particles.push({
           x: target.x + target.w / 2,
           y: target.y + target.h / 2,
-          vx: (Math.random() - 0.5) * 2,
-          vy: (Math.random() - 0.5) * 2,
-          life: 24,
-          color: "#f8fafc"
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 1,
+          life: 20 + Math.random() * 15,
+          color: "#ef4444",
+          isBlood: true,
+          size: 2 + Math.random() * 2
+        });
+      }
+    }
+
+    function spawnLandingDust(x, y) {
+      for (let i = 0; i < 6; i++) {
+        state.particles.push({
+          x: x + (Math.random() - 0.5) * 20,
+          y: y + Math.random() * 3,
+          vx: (Math.random() - 0.5) * 1.8,
+          vy: -0.6 - Math.random() * 0.8,
+          life: 20 + Math.random() * 10,
+          color: "#94a3b8",
+          isDust: true,
+          size: 1 + Math.random() * 2
         });
       }
     }
@@ -1176,6 +1209,19 @@
         isArrow: true,
         trail: []
       });
+
+      for (let i = 0; i < 8; i++) {
+        state.particles.push({
+          x: p.x + p.w / 2 + p.dir * 12,
+          y: p.y + p.h / 2 - 5,
+          vx: p.dir * (1.5 + Math.random() * 1.5),
+          vy: (Math.random() - 0.5) * 1.4,
+          life: 12 + Math.random() * 8,
+          color: arrowColor,
+          isSwordTrail: true,
+          size: 2 + Math.random() * 2
+        });
+      }
       
       playTone(440, 80, "sine", 0.05);
       updateHud();
@@ -1302,6 +1348,8 @@
 
     function step(dt) {
       const p = state.player;
+      const wasOnGround = p.onGround;
+      const fallSpeed = p.vy;
 
       p.vx = 0;
       if (state.pressed.left) { p.vx = -p.speed; p.dir = -1; }
@@ -1318,11 +1366,46 @@
         p.y = state.groundY - p.h;
         p.vy = 0;
         p.onGround = true;
+        if (!wasOnGround && fallSpeed > 2.5) {
+          p.landSquish = 7;
+          spawnLandingDust(p.x + p.w / 2, state.groundY - 1);
+        }
         const muts = state.run.activeMutations;
         const hasDoubleJump = muts && muts.some && muts.some(m => m && m.id === "double_jump");
         p.jumpsLeft = hasDoubleJump ? 2 : 1;
       } else {
         p.onGround = false;
+      }
+
+      if (p.landSquish > 0) p.landSquish--;
+      p.animTimer += dt;
+      if (!p.onGround) {
+        p.animState = p.vy < 0 ? "jump" : "fall";
+      } else if (Math.abs(p.vx) > 0.15) {
+        p.animState = "run";
+        p.runCycle += dt * 0.018;
+      } else {
+        p.animState = "idle";
+      }
+
+      if (p.animState === "idle") {
+        p.breathScale = 1 + Math.sin(performance.now() * 0.006) * 0.03;
+      } else {
+        p.breathScale = 1;
+      }
+
+      if (p.animState === "run") {
+        p.legAngle = Math.sin(p.runCycle) * 0.55;
+        p.armAngle = -Math.sin(p.runCycle) * 0.45;
+      } else if (p.animState === "jump") {
+        p.legAngle = -0.35;
+        p.armAngle = 0.35;
+      } else if (p.animState === "fall") {
+        p.legAngle = 0.3;
+        p.armAngle = -0.2;
+      } else {
+        p.legAngle = 0;
+        p.armAngle = 0;
       }
 
       if (p.shotCd > 0) p.shotCd--;
@@ -1344,17 +1427,21 @@
       const waveDmg = Math.floor(enemyWave.wave * 0.3);
 
       for (const e of state.enemies) {
-        const dist = e.x - (p.x + p.w);
-        if (dist > 5) {
-          e.x -= e.speed;
+        const playerCenterX = p.x + p.w / 2;
+        const enemyCenterX = e.x + e.w / 2;
+        const dist = enemyCenterX - playerCenterX;
+        const contactRange = p.w / 2 + e.w / 2 + 6;
+        if (Math.abs(dist) > contactRange) {
+          e.x += dist > 0 ? -e.speed : e.speed;
         } else if (e.hitCd > 0) {
           e.hitCd--;
         } else if (now - state.lastDamage > 600) {
           if (p.shieldActive) {
             playTone(600, 60, "sine", 0.05);
-            e.x -= 15;
+            e.x += dist > 0 ? 15 : -15;
             toast("BLOKADA!");
             e.hitCd = 30;
+            state.lastDamage = now;
             continue;
           } else {
             const dmg = 1 + (e.elite ? 2 : 0) + waveDmg;
@@ -1373,17 +1460,21 @@
 
       if (state.boss) {
         const b = state.boss;
-        const dist = Math.abs(p.x - b.x);
-        if (dist > 10) {
-          b.x += (p.x < b.x ? -1 : 1) * 0.8;
+        const playerCenterX = p.x + p.w / 2;
+        const bossCenterX = b.x + b.w / 2;
+        const dist = bossCenterX - playerCenterX;
+        const contactRange = p.w / 2 + b.w / 2 + 4;
+        if (Math.abs(dist) > contactRange) {
+          b.x += dist > 0 ? -0.8 : 0.8;
         }
         if (b.hitCd > 0) b.hitCd--;
-        if (dist <= 10 && now - state.lastDamage > 800) {
+        if (Math.abs(dist) <= contactRange && now - state.lastDamage > 800) {
           if (p.shieldActive) {
             playTone(500, 80, "sine", 0.06);
-            b.x -= 25;
+            b.x += dist > 0 ? 25 : -25;
             toast("BLOKADA BOSS!");
             b.hitCd = 40;
+            state.lastDamage = now;
           } else {
             state.currentHearts = Math.max(0, state.currentHearts - 3);
             b.hitCd = 40;
@@ -1430,6 +1521,21 @@
         addXp(15 * kills, "kill", state.w - 60, state.groundY - 30);
         
         killedEnemies.forEach(e => {
+          for (let i = 0; i < 12; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 1 + Math.random() * 2.5;
+            state.particles.push({
+              x: e.x + e.w / 2,
+              y: e.y + e.h / 2,
+              vx: Math.cos(angle) * speed,
+              vy: Math.sin(angle) * speed - 1.2,
+              life: 22 + Math.random() * 20,
+              color: e.elite ? "#fde047" : "#ef4444",
+              isBlood: true,
+              size: e.elite ? 3 : 2
+            });
+          }
+
           const worldId = state.currentWorld ? state.currentWorld.id : "fire";
           const drops = WORLD_DROPS[worldId];
           if (drops) {
@@ -1537,26 +1643,38 @@
     }
 
     function drawPlayerSprite(p) {
-      const sx = p.x;
-      const sy = p.y;
       const facing = p.dir > 0 ? 1 : -1;
+      const bob = p.animState === "run" ? Math.sin(p.runCycle) * 1.5 : 0;
+      const legSwing = p.legAngle;
+      const armSwing = p.armAngle;
+      const squish = p.landSquish > 0 ? p.landSquish / 24 : 0;
+
+      ctx.save();
+      ctx.translate(p.x + p.w / 2, p.y + p.h / 2 + bob);
+      ctx.scale(facing, p.breathScale - squish);
+      ctx.scale(1 + squish, 1);
 
       ctx.fillStyle = "#1d4ed8";
-      ctx.fillRect(sx + 8, sy + 14, 18, 24);
+      ctx.fillRect(-9, -9, 18, 24);
       ctx.fillStyle = "#93c5fd";
-      ctx.fillRect(sx + 10, sy + 18, 14, 14);
+      ctx.fillRect(-7, -5, 14, 14);
 
       ctx.fillStyle = "#f8fafc";
-      ctx.fillRect(sx + 10, sy + 4, 14, 12);
+      ctx.fillRect(-7, -19, 14, 12);
       ctx.fillStyle = "#111827";
-      ctx.fillRect(sx + (facing > 0 ? 18 : 12), sy + 8, 3, 3);
+      ctx.fillRect(2, -15, 3, 3);
 
       ctx.fillStyle = "#334155";
-      ctx.fillRect(sx + 8, sy + 38, 7, 8);
-      ctx.fillRect(sx + 19, sy + 38, 7, 8);
+      ctx.fillRect(-9, 15 + Math.sin(legSwing) * 2, 7, 8);
+      ctx.fillRect(2, 15 + Math.sin(legSwing + Math.PI) * 2, 7, 8);
 
       ctx.fillStyle = "#60a5fa";
-      ctx.fillRect(sx + (facing > 0 ? 25 : 4), sy + 20, 7, 4);
+      ctx.fillRect(8, -3 + Math.sin(armSwing) * 2, 7, 4);
+
+      ctx.restore();
+
+      const sx = p.x;
+      const sy = p.y;
 
       if (p.hasBow) {
         ctx.save();
@@ -1607,13 +1725,25 @@
       const pal = e.palette || enemyPalettes[0];
       const eyeW = Math.max(3, Math.floor(e.w * 0.12));
       const eyeY = e.y + Math.floor(e.h * 0.22);
+      const hitFlashActive = e.hitFlash > 0;
+      
+      if (hitFlashActive) {
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+      }
 
       if (e.elite) {
         ctx.shadowColor = "#fde047";
-        ctx.shadowBlur = 9;
+        const pulse = 5 + Math.sin(performance.now() * 0.008) * 4;
+        ctx.shadowBlur = pulse;
       }
 
-      ctx.fillStyle = pal.body;
+      if (hitFlashActive) {
+        ctx.fillStyle = "#ffffff";
+        e.hitFlash--;
+      } else {
+        ctx.fillStyle = pal.body;
+      }
       ctx.fillRect(e.x + 4, e.y + Math.floor(e.h * 0.34), e.w - 8, e.h - Math.floor(e.h * 0.34));
       ctx.fillStyle = pal.skin;
       ctx.fillRect(e.x + 2, e.y + 4, e.w - 4, Math.floor(e.h * 0.36));
@@ -1686,6 +1816,10 @@
           ctx.bezierCurveTo(hx + 6, hy, hx + 3, hy, hx + 3, hy + 2);
           ctx.fill();
         }
+      }
+      
+      if (hitFlashActive) {
+        ctx.restore();
       }
     }
 
@@ -1795,10 +1929,10 @@
 
       if (state.boss) drawBossSprite(state.boss);
 
-      if (state.player.sword && state.player.sword.frame < 12) {
+      if (state.player.sword && state.player.sword.frame < 14) {
         const s = state.player.sword;
         const p = state.player;
-        const swingAngle = (s.frame / 12) * Math.PI * 1.2 - Math.PI * 0.6;
+        const swingAngle = (s.frame / 14) * Math.PI * 1.5 - Math.PI * 0.75;
         const swordLen = s.range;
         const sx = p.x + p.w / 2;
         const sy = p.y + p.h / 2;
@@ -1807,6 +1941,16 @@
         ctx.translate(sx + (p.dir > 0 ? 8 : -8), sy);
         ctx.rotate(p.dir > 0 ? swingAngle : -swingAngle + Math.PI);
         
+        for (let i = 1; i <= 4; i++) {
+          ctx.strokeStyle = s.color;
+          ctx.globalAlpha = 0.22 - i * 0.035;
+          ctx.lineWidth = 10 - i;
+          ctx.beginPath();
+          ctx.arc(0, 0, swordLen * (0.65 + i * 0.05), swingAngle - 0.25 * i, swingAngle - 0.25 * (i - 1));
+          ctx.stroke();
+        }
+
+        ctx.globalAlpha = 1;
         ctx.strokeStyle = s.color;
         ctx.lineWidth = 6;
         ctx.lineCap = "round";
@@ -1819,6 +1963,17 @@
         ctx.beginPath();
         ctx.arc(0, 0, 5, 0, Math.PI * 2);
         ctx.fill();
+
+        state.particles.push({
+          x: sx + Math.cos(p.dir > 0 ? swingAngle : -swingAngle + Math.PI) * (swordLen * 0.85),
+          y: sy + Math.sin(p.dir > 0 ? swingAngle : -swingAngle + Math.PI) * (swordLen * 0.85),
+          vx: (Math.random() - 0.5) * 1.2,
+          vy: (Math.random() - 0.5) * 1.2,
+          life: 8,
+          color: s.color,
+          isSwordTrail: true,
+          size: 2
+        });
         
         ctx.restore();
         s.frame++;
@@ -1933,6 +2088,28 @@
           p.y += p.vy;
           p.starFrame++;
           if (p.starFrame > 20) p.life = 0;
+        } else if (p.isDust) {
+          const alpha = Math.max(0, p.life / 30);
+          ctx.fillStyle = `rgba(148,163,184,${alpha})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size || 2, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (p.isBlood) {
+          const alpha = Math.max(0, p.life / 40);
+          ctx.fillStyle = `rgba(239,68,68,${alpha})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size || 2, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (p.isSwordTrail) {
+          const alpha = Math.max(0, p.life / 12);
+          ctx.fillStyle = `rgba(255,255,255,${alpha * 0.5})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, (p.size || 2) + 0.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size || 2, 0, Math.PI * 2);
+          ctx.fill();
         } else {
           ctx.fillStyle = p.color;
           ctx.fillRect(p.x, p.y, 2, 2);
@@ -2076,6 +2253,13 @@
       if (ev.code === "KeyA" || ev.code === "ArrowLeft") state.pressed.left = false;
       if (ev.code === "KeyD" || ev.code === "ArrowRight") state.pressed.right = false;
       if (ev.code === "KeyE" || ev.code === "ShiftLeft" || ev.code === "ShiftRight") state.player.shieldKey = false;
+    });
+
+    window.addEventListener("blur", () => {
+      state.pressed.left = false;
+      state.pressed.right = false;
+      state.player.shieldKey = false;
+      state.player.shieldActive = false;
     });
 
     document.getElementById("jumpBtn").addEventListener("pointerdown", ev => {
