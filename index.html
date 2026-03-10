@@ -197,6 +197,80 @@
 
     .runOverlay.hidden { display: none; }
 
+    .frontOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background:
+        radial-gradient(circle at 15% 10%, rgba(56, 189, 248, 0.25), transparent 45%),
+        radial-gradient(circle at 85% 90%, rgba(239, 68, 68, 0.2), transparent 40%),
+        rgba(2, 6, 23, 0.92);
+      backdrop-filter: blur(8px);
+    }
+
+    .frontOverlay.hidden { display: none; }
+
+    .frontCard {
+      width: min(560px, 100%);
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(15, 23, 42, 0.9);
+      padding: 18px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+      animation: cardIn 240ms ease;
+    }
+
+    .frontCard h1,
+    .frontCard h2 {
+      margin: 0 0 10px;
+      letter-spacing: 0.02em;
+    }
+
+    .frontCard h1 { font-size: 28px; }
+    .frontCard h2 { font-size: 22px; }
+
+    .frontCard p {
+      margin: 0 0 12px;
+      color: #cbd5e1;
+      line-height: 1.45;
+      font-size: 14px;
+    }
+
+    .frontTag {
+      display: inline-block;
+      margin-bottom: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      background: rgba(56, 189, 248, 0.16);
+      color: #7dd3fc;
+      border: 1px solid rgba(125, 211, 252, 0.35);
+    }
+
+    .frontActions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .frontActions .primary {
+      background: linear-gradient(180deg, #0ea5e9, #0369a1);
+    }
+
+    .view.hidden { display: none; }
+
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(12px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
     .runCard {
       width: min(460px, 100%);
       border-radius: 14px;
@@ -276,6 +350,11 @@
       font-size: 9px;
       color: #64748b;
     }
+
+    @media (max-width: 560px) {
+      .frontActions { grid-template-columns: 1fr; }
+      .frontCard h1 { font-size: 24px; }
+    }
   </style>
 </head>
 <body>
@@ -290,7 +369,6 @@
       <div class="line"><span>Mutacja:</span><strong id="mutInfo">Koszt 120</strong></div>
       <div class="line"><span>Tarcza:</span><strong id="shieldStatus" style="color:#64748b;">NIEAKTYWNA</strong></div>
       <div class="line"><span>Boss:</span><strong id="bossState">Brak</strong></div>
-      <div class="line"><button id="debugBtn" style="padding:2px 6px;font-size:10px;background:#374151;">DEBUG</button></div>
       <div class="xp-bar">
         <div class="xp-fill" id="xpFill" style="width:0%"></div>
         <span class="xp-text" id="xpText">0 / 50 XP</span>
@@ -318,17 +396,45 @@
         <button id="attackBtn">Atak</button>
       </div>
       <div class="actions">
-        <button id="powerBasic">Podstawa</button>
-        <button id="powerFire" class="fireBtn lock">Ognista</button>
-        <button id="powerBlade" class="bladeBtn lock">Szable</button>
-        <button id="powerStorm" class="stormBtn lock">Burza</button>
+        <button id="cyclePowerBtn">Moc: Podstawowa</button>
         <button id="soundBtn">Dzwiek: ON</button>
-        <button id="spawnFireBoss" class="bossBtn">Boss Ognik</button>
-        <button id="spawnBladeBoss" class="bossBtn">Boss Szable</button>
-        <button id="spawnStormBoss" class="bossBtn">Boss Burzak</button>
         <button id="skillBow" class="stormBtn">LUK (Q) -15XP</button>
         <button id="skillShield" class="bladeBtn">TARCZA (E) trzymaj!</button>
         <button id="mutateBtn" class="mutBtn">Mutuj 2-3 moce</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="frontOverlay" class="frontOverlay">
+    <div id="introView" class="frontCard view">
+      <span class="frontTag">INTRO</span>
+      <h1>Mutacje Mocy</h1>
+      <p>Miasto tonie w chaosie. Fale mutantow przebijaja bariery, a tylko Ty mozesz zamknac portale i pokonac Wladce Cieni.</p>
+      <p>Wybieraj mutacje, lacz zywioly i buduj styl walki run po runie.</p>
+      <div class="frontActions">
+        <button id="introNextBtn" class="primary">Dalej</button>
+        <button id="introSkipBtn">Pomin intro</button>
+      </div>
+    </div>
+
+    <div id="menuView" class="frontCard view hidden">
+      <span class="frontTag">START GAME</span>
+      <h2>Wybierz akcje</h2>
+      <p>Zagraj run, zbieraj esencje i odblokowuj coraz silniejsze kombinacje mocy.</p>
+      <p id="menuEssence">Esencja: 0</p>
+      <div class="frontActions">
+        <button id="menuStartBtn" class="primary">Start Run</button>
+        <button id="menuLoreBtn">Jak grac</button>
+      </div>
+    </div>
+
+    <div id="loreView" class="frontCard view hidden">
+      <span class="frontTag">HOW TO PLAY</span>
+      <h2>Sterowanie dotykiem</h2>
+      <p>Lewa czesc ekranu: ruch w lewo. Prawa czesc: ruch w prawo. Dotknij gory areny by skoczyc, srodka lub dolu by zaatakowac.</p>
+      <p>Dolny panel to szybkie umiejetnosci: LUK, TARCZA i Mutacja.</p>
+      <div class="frontActions">
+        <button id="loreBackBtn" class="primary">Wroc</button>
       </div>
     </div>
   </div>
@@ -617,8 +723,15 @@
     const runTextEl = document.getElementById("runText");
     const runMetaEl = document.getElementById("runMeta");
     const runActionBtnEl = document.getElementById("runActionBtn");
+    const cyclePowerBtnEl = document.getElementById("cyclePowerBtn");
+    const frontOverlayEl = document.getElementById("frontOverlay");
+    const introViewEl = document.getElementById("introView");
+    const menuViewEl = document.getElementById("menuView");
+    const loreViewEl = document.getElementById("loreView");
+    const menuEssenceEl = document.getElementById("menuEssence");
 
     const RUN_STORAGE_KEY = "mutacje_essence_v1";
+    const INTRO_STORAGE_KEY = "mutacje_intro_seen_v1";
 
     const WORLDS = [
       { id: "fire", name: "Popielna Kuznia", color: "#ef4444", bg: "linear-gradient(#1a0a0a 0%, #2d1111 50%, #0f0808 100%)", waves: [1,2], enemyPalette: 1 },
@@ -812,7 +925,6 @@
       arenaHazards: [],
       screenShake: 0,
       hitStop: 0,
-      debug: false,
       damageFlash: 0,
       lastDamage: 0,
       lastBlockToast: 0,
@@ -828,7 +940,8 @@
         activeSynergies: [],
         waveForMutation: 0,
         activeWaveMutator: null,
-        toxicTick: 0
+        toxicTick: 0,
+        objective: null
       },
       stats: {
         chestsOpened: 0,
@@ -923,6 +1036,7 @@
       { id: "iron_hide", name: "Iron Hide", color: "#cbd5e1", desc: "Wrogowie maja wiecej HP", enemyHpMul: 1.28 },
       { id: "bounty_storm", name: "Bounty Storm", color: "#fcd34d", desc: "Wiecej skrzynek i lepsza nagroda za fale", chestEveryMul: 0.72, rewardBonus: 20 }
     ];
+    const OBJECTIVE_WAVES = new Set([3, 6, 9]);
 
     const MUTATION_TAGS = ["fire", "blade", "storm", "defense", "mobility", "attack"];
     const MUTATION_RARITIES = {
@@ -996,6 +1110,61 @@
       return pick;
     }
 
+    function setupWaveObjective(wave) {
+      if (!OBJECTIVE_WAVES.has(wave)) {
+        state.run.objective = null;
+        return null;
+      }
+      let objective;
+      if (wave % 6 === 0) {
+        objective = {
+          id: `obj_destroy_${wave}`,
+          type: "destroy",
+          name: "Zniszcz Oltarz",
+          desc: "Rozbij oltarz zanim sie naladuje",
+          x: state.w * 0.66,
+          y: state.groundY - 72,
+          w: 34,
+          h: 72,
+          hp: 55 + wave * 6,
+          maxHp: 55 + wave * 6,
+          timer: 22000,
+          timerMax: 22000,
+          completed: false,
+          failed: false,
+          hitCd: 0,
+          enemyTick: 0
+        };
+      } else {
+        objective = {
+          id: `obj_defend_${wave}`,
+          type: "defend",
+          name: "Obron Totem",
+          desc: "Przetrwaj i nie pozwol zniszczyc totemu",
+          x: state.w * 0.38,
+          y: state.groundY - 56,
+          w: 26,
+          h: 56,
+          hp: 26 + wave * 3,
+          maxHp: 26 + wave * 3,
+          timer: 17000,
+          timerMax: 17000,
+          completed: false,
+          failed: false,
+          hitCd: 0,
+          enemyTick: 0
+        };
+      }
+      state.run.objective = objective;
+      return objective;
+    }
+
+    function getActiveObjective() {
+      const o = state.run.objective;
+      if (!o || o.completed || o.failed) return null;
+      return o;
+    }
+
     function applyWaveTheme() {
       const theme = getWaveTheme(enemyWave.wave);
       const mutator = getWaveMutator();
@@ -1009,9 +1178,11 @@
       const theme = enemyWave.theme || getWaveTheme(enemyWave.wave);
       const roles = getAvailableRolesForWave(enemyWave.wave).join(" / ");
       const mutator = getWaveMutator();
+      const objective = getActiveObjective();
       const mutatorTag = mutator ? ` | mutator: ${mutator.name}` : "";
       toast(`>>> FALA ${enemyWave.wave}: ${enemyWave.enemiesInWave} wrogow | ${theme.name.toUpperCase()} - ${theme.desc}${mutatorTag} | role: ${roles} <<<`);
       if (mutator) toast(`MUTATOR FALI: ${mutator.name} - ${mutator.desc}`);
+      if (objective) toast(`CEL FALI: ${objective.name} - ${objective.desc}`);
       playTone(200, 100, "sawtooth", 0.05);
       playTone(250, 100, "sawtooth", 0.05);
     }
@@ -1185,6 +1356,46 @@
       localStorage.setItem(RUN_STORAGE_KEY, String(state.run.essence));
     }
 
+    function setFrontView(view) {
+      introViewEl.classList.toggle("hidden", view !== "intro");
+      menuViewEl.classList.toggle("hidden", view !== "menu");
+      loreViewEl.classList.toggle("hidden", view !== "lore");
+      frontOverlayEl.classList.remove("hidden");
+      menuEssenceEl.textContent = `Esencja: ${state.run.essence}`;
+    }
+
+    function closeFrontOverlay() {
+      frontOverlayEl.classList.add("hidden");
+    }
+
+    function initFrontOverlay() {
+      const seenIntro = localStorage.getItem(INTRO_STORAGE_KEY) === "1";
+      setFrontView(seenIntro ? "menu" : "intro");
+
+      document.getElementById("introNextBtn").addEventListener("click", () => {
+        localStorage.setItem(INTRO_STORAGE_KEY, "1");
+        setFrontView("menu");
+      });
+
+      document.getElementById("introSkipBtn").addEventListener("click", () => {
+        localStorage.setItem(INTRO_STORAGE_KEY, "1");
+        setFrontView("menu");
+      });
+
+      document.getElementById("menuStartBtn").addEventListener("click", () => {
+        closeFrontOverlay();
+        startRun();
+      });
+
+      document.getElementById("menuLoreBtn").addEventListener("click", () => {
+        setFrontView("lore");
+      });
+
+      document.getElementById("loreBackBtn").addEventListener("click", () => {
+        setFrontView("menu");
+      });
+    }
+
     function showRunOverlay(title, text, btnLabel, onClick, meta) {
       runTitleEl.textContent = title;
       runTextEl.textContent = text;
@@ -1299,6 +1510,7 @@
       enemyWave.announced = false;
       state.run.activeWaveMutator = null;
       state.run.toxicTick = 0;
+      state.run.objective = null;
       applyWaveTheme();
       chestSpawn.timer = 0;
       state.player.x = 60;
@@ -1321,6 +1533,7 @@
       resetRunStats();
       state.run.phase = "running";
       state.run.startedAt = performance.now();
+      closeFrontOverlay();
       hideRunOverlay();
       toast("Run start! Dotrzyj do fali 10 i pokonaj bossa koncowego.");
       updateHud();
@@ -1330,6 +1543,7 @@
       state.run.phase = victory ? "reward" : "gameover";
       state.run.endedAt = performance.now();
       clearArenaHazards();
+      state.run.objective = null;
       if (!victory) {
         state.run.activeMutations = [];
         state.run.activeSynergies = [];
@@ -1459,6 +1673,19 @@
         tri: "Legenda 3 Mocy"
       };
       activePowerEl.textContent = label[power] || "Podstawowa";
+      if (cyclePowerBtnEl) {
+        cyclePowerBtnEl.textContent = `Moc: ${label[power] || "Podstawowa"}`;
+      }
+    }
+
+    function cyclePower() {
+      const available = ["basic"];
+      if (state.unlocked.fire) available.push("fire");
+      if (state.unlocked.blade) available.push("blade");
+      if (state.unlocked.storm) available.push("storm");
+      const current = available.indexOf(state.activePower);
+      const next = available[(current + 1) % available.length] || "basic";
+      setPower(next);
     }
 
     function updateHud() {
@@ -1472,8 +1699,17 @@
       const phaseTag = state.run.phase === "running" ? "RUN" : state.run.phase.toUpperCase();
       const themeTag = enemyWave.theme ? ` | ${enemyWave.theme.name}` : "";
       const mutator = getWaveMutator();
+      const objective = getActiveObjective();
       const mutatorTag = mutator ? ` | ${mutator.name}` : "";
-      questEl.textContent = `${phaseTag} Fala ${enemyWave.wave}${themeTag}${mutatorTag} (${queue} w kolejce)`;
+      let objectiveTag = "";
+      if (objective) {
+        if (objective.type === "defend") {
+          objectiveTag = ` | Cel: Totem ${Math.max(0, Math.ceil(objective.hp))} HP / ${Math.ceil(objective.timer / 1000)}s`;
+        } else {
+          objectiveTag = ` | Cel: Oltarz ${Math.max(0, Math.ceil(objective.hp))} HP / ${Math.ceil(objective.timer / 1000)}s`;
+        }
+      }
+      questEl.textContent = `${phaseTag} Fala ${enemyWave.wave}${themeTag}${mutatorTag} (${queue} w kolejce)${objectiveTag}`;
       
       const worldInfoEl = document.getElementById("worldInfo");
       if (state.currentWorld) {
@@ -1833,6 +2069,19 @@
         if (dx < range + 20 && dy < 50) {
           dealDamage(state.boss, dmg);
           addXp(5, "boss hit", state.boss.x + state.boss.w/2, state.boss.y);
+        }
+      }
+
+      const objective = getActiveObjective();
+      if (objective && objective.type === "destroy") {
+        const dx = Math.abs((p.x + p.w / 2) - (objective.x + objective.w / 2));
+        const dy = Math.abs((p.y + p.h / 2) - (objective.y + objective.h / 2));
+        if (dx < range + 12 && dy < 52) {
+          objective.hp = Math.max(0, objective.hp - dmg);
+          objective.hitCd = 6;
+          addScreenShake(3);
+          applyHitStop(30);
+          addXp(2, "objective hit", objective.x + objective.w / 2, objective.y);
         }
       }
 
@@ -2251,6 +2500,54 @@
         }
       }
 
+      const objective = getActiveObjective();
+      if (objective) {
+        objective.timer -= dt;
+        if (objective.hitCd > 0) objective.hitCd--;
+        if (objective.type === "defend") {
+          objective.enemyTick -= dt;
+          if (objective.enemyTick <= 0) {
+            const attackers = state.enemies.filter(e => !e.dying && Math.abs((e.x + e.w / 2) - (objective.x + objective.w / 2)) < 60);
+            if (attackers.length > 0) {
+              objective.hp = Math.max(0, objective.hp - attackers.length);
+              objective.hitCd = 8;
+              objective.enemyTick = 520;
+              pushParticle({
+                x: objective.x + objective.w / 2,
+                y: objective.y + objective.h / 2,
+                vx: 0,
+                vy: -0.3,
+                life: 18,
+                color: "#f59e0b",
+                text: `-${attackers.length}`,
+                isText: true
+              });
+            } else {
+              objective.enemyTick = 320;
+            }
+          }
+        }
+        if (objective.hp <= 0 && !objective.failed) {
+          objective.failed = true;
+          toast(`CEL FALI NIEUDANY: ${objective.name}`);
+          state.currentHearts = Math.max(0, state.currentHearts - 1);
+          state.damageFlash = 10;
+        } else if (objective.type === "defend" && objective.timer <= 0 && !objective.completed) {
+          objective.completed = true;
+          addCoins(45 + enemyWave.wave * 5, "objective");
+          addXp(35, "objective", objective.x + objective.w / 2, objective.y);
+          toast(`CEL FALI UKONCZONY: ${objective.name}`);
+        } else if (objective.type === "destroy" && objective.hp <= 0 && !objective.completed) {
+          objective.completed = true;
+          addCoins(60 + enemyWave.wave * 6, "objective");
+          addXp(45, "objective", objective.x + objective.w / 2, objective.y);
+          toast(`CEL FALI UKONCZONY: ${objective.name}`);
+        } else if (objective.type === "destroy" && objective.timer <= 0 && !objective.failed && !objective.completed) {
+          objective.failed = true;
+          toast(`OLTARZ PRZETRWAL: ${objective.name}`);
+        }
+      }
+
       if (state.boss) {
         const b = state.boss;
         const playerCenterX = p.x + p.w / 2;
@@ -2384,6 +2681,14 @@
         if (state.boss && bullet.life > 0 && circleRectHit(bullet, state.boss)) {
           dealDamage(state.boss, bullet.dmg);
           addXp(4, "arrow boss", state.boss.x + state.boss.w/2, state.boss.y);
+          bullet.life = 0;
+        }
+
+        const objective = getActiveObjective();
+        if (objective && objective.type === "destroy" && bullet.life > 0 && circleRectHit(bullet, objective)) {
+          objective.hp = Math.max(0, objective.hp - bullet.dmg);
+          objective.hitCd = 6;
+          addXp(2, "arrow objective", objective.x + objective.w / 2, objective.y);
           bullet.life = 0;
         }
       }
@@ -2851,6 +3156,28 @@
       ctx.fillRect(b.x, b.y - 10, (b.hp / b.maxHp) * b.w, 6);
     }
 
+    function drawObjective(o) {
+      if (!o) return;
+      const flash = o.hitCd > 0;
+      if (o.type === "defend") {
+        ctx.fillStyle = flash ? "#fef08a" : "#22c55e";
+        ctx.fillRect(o.x + 8, o.y + 10, o.w - 16, o.h - 10);
+        ctx.fillStyle = "#86efac";
+        ctx.fillRect(o.x + 3, o.y + 6, o.w - 6, 10);
+      } else {
+        ctx.fillStyle = flash ? "#fef08a" : "#f43f5e";
+        ctx.fillRect(o.x + 6, o.y + 6, o.w - 12, o.h - 6);
+        ctx.fillStyle = "#7f1d1d";
+        ctx.fillRect(o.x + 2, o.y + 16, o.w - 4, 8);
+      }
+      if (o.maxHp > 0) {
+        ctx.fillStyle = "rgba(15,23,42,0.6)";
+        ctx.fillRect(o.x - 2, o.y - 10, o.w + 4, 5);
+        ctx.fillStyle = o.type === "defend" ? "#22c55e" : "#f43f5e";
+        ctx.fillRect(o.x - 2, o.y - 10, ((o.hp / o.maxHp) * (o.w + 4)), 5);
+      }
+    }
+
     function drawTelegraph(shape, color, alpha, data) {
       ctx.save();
       ctx.globalAlpha = alpha;
@@ -3038,6 +3365,7 @@
       });
       state.enemies.forEach(drawEnemySprite);
       state.chests.forEach(drawChestSprite);
+      if (state.run.objective && !state.run.objective.completed && !state.run.objective.failed) drawObjective(state.run.objective);
 
       if (state.boss) drawBossSprite(state.boss);
 
@@ -3311,7 +3639,8 @@
           spawnEnemy();
         }
 
-        if (state.enemies.length === 0 && enemyWave.spawned >= enemyWave.enemiesInWave && !state.boss) {
+        const objectiveReady = !getActiveObjective();
+        if (state.enemies.length === 0 && enemyWave.spawned >= enemyWave.enemiesInWave && !state.boss && objectiveReady) {
           if (!state.run.miniBossSpawned && enemyWave.wave >= 5) {
             state.run.miniBossSpawned = true;
             spawnRunBoss("mini");
@@ -3321,6 +3650,7 @@
           } else if (!state.run.finalBossSpawned) {
             enemyWave.wave++;
             rollWaveMutator(enemyWave.wave);
+            setupWaveObjective(enemyWave.wave);
             applyWaveTheme();
             enemyWave.spawned = 0;
             enemyWave.timer = -1500;
@@ -3414,6 +3744,88 @@
       state.player.shieldActive = false;
     }
 
+    const canvasTouchRoles = new Map();
+
+    function syncCanvasDirections() {
+      let left = false;
+      let right = false;
+      canvasTouchRoles.forEach(role => {
+        if (role === "left") left = true;
+        if (role === "right") right = true;
+      });
+      state.pressed.left = left || state.pressed.left;
+      state.pressed.right = right || state.pressed.right;
+    }
+
+    function getTouchRole(x) {
+      if (x < state.w * 0.35) return "left";
+      if (x > state.w * 0.65) return "right";
+      return "center";
+    }
+
+    function onArenaTouchStart(pointerId, x, y) {
+      if (state.run.phase !== "running") return;
+      const role = getTouchRole(x);
+      if (role === "left" || role === "right") {
+        canvasTouchRoles.set(pointerId, role);
+        syncCanvasDirections();
+        return;
+      }
+      if (y < state.h * 0.45 && state.player.jumpsLeft > 0) {
+        state.player.vy = state.player.jump;
+        state.player.jumpsLeft--;
+      } else {
+        attack();
+      }
+    }
+
+    function onArenaTouchMove(pointerId, x) {
+      if (!canvasTouchRoles.has(pointerId)) return;
+      const role = getTouchRole(x);
+      if (role === "left" || role === "right") {
+        canvasTouchRoles.set(pointerId, role);
+      }
+      syncCanvasDirections();
+    }
+
+    function onArenaTouchEnd(pointerId) {
+      if (!canvasTouchRoles.has(pointerId)) return;
+      const oldRole = canvasTouchRoles.get(pointerId);
+      canvasTouchRoles.delete(pointerId);
+      if (oldRole === "left") {
+        state.pressed.left = Array.from(canvasTouchRoles.values()).includes("left");
+      }
+      if (oldRole === "right") {
+        state.pressed.right = Array.from(canvasTouchRoles.values()).includes("right");
+      }
+    }
+
+    if (HAS_POINTER_EVENTS) {
+      canvas.addEventListener("pointerdown", ev => {
+        if (ev.pointerType !== "touch") return;
+        ev.preventDefault();
+        if (canvas.setPointerCapture) {
+          try { canvas.setPointerCapture(ev.pointerId); } catch (_) {}
+        }
+        onArenaTouchStart(ev.pointerId, ev.offsetX, ev.offsetY);
+      });
+      canvas.addEventListener("pointermove", ev => {
+        if (ev.pointerType !== "touch") return;
+        ev.preventDefault();
+        onArenaTouchMove(ev.pointerId, ev.offsetX);
+      });
+      canvas.addEventListener("pointerup", ev => {
+        if (ev.pointerType !== "touch") return;
+        ev.preventDefault();
+        onArenaTouchEnd(ev.pointerId);
+      });
+      canvas.addEventListener("pointercancel", ev => {
+        if (ev.pointerType !== "touch") return;
+        ev.preventDefault();
+        onArenaTouchEnd(ev.pointerId);
+      });
+    }
+
     bindHold("leftBtn", "left", true);
     bindHold("rightBtn", "right", true);
 
@@ -3466,23 +3878,10 @@
       attack();
     });
 
-    document.getElementById("powerBasic").addEventListener("click", () => setPower("basic"));
-    document.getElementById("powerFire").addEventListener("click", () => {
-      if (!state.unlocked.fire) return toast("Pokonaj Ognika!");
-      setPower("fire");
+    cyclePowerBtnEl.addEventListener("click", () => {
+      if (state.run.phase !== "running") return;
+      cyclePower();
     });
-    document.getElementById("powerBlade").addEventListener("click", () => {
-      if (!state.unlocked.blade) return toast("Pokonaj Mistrza Szabli!");
-      setPower("blade");
-    });
-    document.getElementById("powerStorm").addEventListener("click", () => {
-      if (!state.unlocked.storm) return toast("Pokonaj Burzaka!");
-      setPower("storm");
-    });
-
-    document.getElementById("spawnFireBoss").addEventListener("click", () => spawnBoss("fire"));
-    document.getElementById("spawnBladeBoss").addEventListener("click", () => spawnBoss("blade"));
-    document.getElementById("spawnStormBoss").addEventListener("click", () => spawnBoss("storm"));
     document.getElementById("mutateBtn").addEventListener("click", () => {
       applyMutation();
       playTone(700, 140, "triangle", 0.04);
@@ -3528,26 +3927,6 @@
       }
     });
 
-    document.getElementById("debugBtn").addEventListener("click", () => {
-      state.debug = !state.debug;
-      document.getElementById("debugBtn").style.background = state.debug ? "#22c55e" : "#374151";
-      toast(`Debug: ${state.debug ? "ON" : "OFF"}`);
-      if (state.debug) {
-        state.currentHearts = state.maxHearts;
-        state.coins += 100;
-        state.xp += 50;
-        toast("+1 serce, monety +100, XP +50");
-      }
-    });
-
-    document.addEventListener("keydown", ev => {
-      if (ev.key === "`" || ev.key === "~") {
-        state.debug = !state.debug;
-        document.getElementById("debugBtn").style.background = state.debug ? "#22c55e" : "#374151";
-        toast(`Debug: ${state.debug ? "ON" : "OFF"}`);
-      }
-    });
-
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
         navigator.serviceWorker.register("sw.js").catch(() => {});
@@ -3559,13 +3938,8 @@
     loadEssence();
     resetRunStats();
     updateHud();
-    showRunOverlay(
-      "Mutacje Run",
-      "Przejdz 10 fal, pokonaj mini bossa i finalnego bossa. Zbieraj Esencje miedzy runami.",
-      "Start Run",
-      startRun,
-      `Esencja: ${state.run.essence}`
-    );
+    hideRunOverlay();
+    initFrontOverlay();
     
     let bgmStarted = false;
     const startBgmOnce = () => {

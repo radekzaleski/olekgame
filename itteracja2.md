@@ -59,3 +59,22 @@ Cel: ograniczyc monotonnosc walki, zwiekszyc roznorodnosc runu i poprawic czytel
 - Bossowie sa rozpoznawalni po zachowaniu po 10-15 sekundach walki.
 - Mniejsza liczba sytuacji "stoi i spamuje atak" jako dominujaca strategia.
 - Lepsza czytelnosc zagrozen (mniej "nie wiedzialem skad dmg").
+
+## Status wdrozenia (snapshot)
+
+Zrobione:
+
+- `I2-H1`, `I2-H2`, `I2-H3`, `I2-H4`, `I2-H5`, `I2-H6`
+- `I2-M1`, `I2-M2`
+
+Do zrobienia (reszta backloga):
+
+- `I2-M3` AI: flank/odskok/panic
+- `I2-M4` Ekonomia: skrzynki ryzyko-nagroda
+- `I2-M5` Build UX: panel tagow + synergie
+- `I2-M6` Audio/Tempo: rozne warstwy exploration/combat/boss
+- `I2-N1` Grafika: parallax backgrounds per world
+- `I2-N2` Grafika enemy: role po sylwetce
+- `I2-N3` VFX: ambient world FX
+- `I2-N4` UI/Reward: mini eventy lootowe
+- `I2-N5` Progressja: keystone mutation slot
