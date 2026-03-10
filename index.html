@@ -48,7 +48,11 @@
       grid-template-rows: auto 1fr auto;
       width: 100%;
       height: 100%;
-      padding: env(safe-area-inset-top) 8px env(safe-area-inset-bottom) 8px;
+      padding:
+        max(env(safe-area-inset-top), 8px)
+        max(env(safe-area-inset-right), 8px)
+        max(env(safe-area-inset-bottom), 8px)
+        max(env(safe-area-inset-left), 8px);
       gap: 6px;
     }
 
@@ -135,6 +139,11 @@
       grid-template-columns: 1fr 1fr;
       grid-auto-rows: minmax(36px, auto);
       align-content: start;
+    }
+
+    .pad button,
+    .actions button {
+      touch-action: none;
     }
 
     button {
@@ -817,7 +826,9 @@
         essence: 0,
         activeMutations: [],
         activeSynergies: [],
-        waveForMutation: 0
+        waveForMutation: 0,
+        activeWaveMutator: null,
+        toxicTick: 0
       },
       stats: {
         chestsOpened: 0,
@@ -904,6 +915,14 @@
         roleWeights: { charger: 3, ranged: 3, buffer: 2, summoner: 2 }
       }
     };
+    const WAVE_MUTATORS = [
+      { id: "low_gravity", name: "Low Gravity", color: "#93c5fd", desc: "Nizsza grawitacja i dluzszy hangtime", gravityMul: 0.62 },
+      { id: "toxic_ground", name: "Toxic Ground", color: "#4ade80", desc: "Ziemia parzy, skacz by unikac trucizny", toxicGround: true },
+      { id: "fast_projectiles", name: "Fast Projectiles", color: "#fca5a5", desc: "Wrogie pociski leca szybciej", hostileProjectileMul: 1.45 },
+      { id: "frenzy", name: "Frenzy", color: "#fb7185", desc: "Szybszy spawn i agresywniejszy napor", enemySpeedMul: 1.18, spawnIntervalMul: 0.82 },
+      { id: "iron_hide", name: "Iron Hide", color: "#cbd5e1", desc: "Wrogowie maja wiecej HP", enemyHpMul: 1.28 },
+      { id: "bounty_storm", name: "Bounty Storm", color: "#fcd34d", desc: "Wiecej skrzynek i lepsza nagroda za fale", chestEveryMul: 0.72, rewardBonus: 20 }
+    ];
 
     const MUTATION_TAGS = ["fire", "blade", "storm", "defense", "mobility", "attack"];
     const MUTATION_RARITIES = {
@@ -959,27 +978,52 @@
       return cycle[(wave - 1) % cycle.length];
     }
 
+    function getWaveMutator() {
+      return state.run.activeWaveMutator;
+    }
+
+    function rollWaveMutator(wave) {
+      if (wave < 2 || wave % 2 !== 0) {
+        state.run.activeWaveMutator = null;
+        state.run.toxicTick = 0;
+        return null;
+      }
+      const previousId = state.run.activeWaveMutator ? state.run.activeWaveMutator.id : null;
+      const pool = WAVE_MUTATORS.filter(mut => mut.id !== previousId);
+      const pick = pool[Math.floor(Math.random() * pool.length)] || WAVE_MUTATORS[0];
+      state.run.activeWaveMutator = pick;
+      state.run.toxicTick = 0;
+      return pick;
+    }
+
     function applyWaveTheme() {
       const theme = getWaveTheme(enemyWave.wave);
+      const mutator = getWaveMutator();
       enemyWave.theme = theme;
-      enemyWave.every = theme.spawnInterval;
+      enemyWave.every = Math.max(1100, theme.spawnInterval * (mutator && mutator.spawnIntervalMul ? mutator.spawnIntervalMul : 1));
       enemyWave.enemiesInWave = Math.min(2 + Math.floor((enemyWave.wave - 1) / 2) + theme.extraEnemies, 8);
+      chestSpawn.every = 12000 * (mutator && mutator.chestEveryMul ? mutator.chestEveryMul : 1);
     }
 
     function announceWaveTheme() {
       const theme = enemyWave.theme || getWaveTheme(enemyWave.wave);
       const roles = getAvailableRolesForWave(enemyWave.wave).join(" / ");
-      toast(`>>> FALA ${enemyWave.wave}: ${enemyWave.enemiesInWave} wrogow | ${theme.name.toUpperCase()} - ${theme.desc} | role: ${roles} <<<`);
+      const mutator = getWaveMutator();
+      const mutatorTag = mutator ? ` | mutator: ${mutator.name}` : "";
+      toast(`>>> FALA ${enemyWave.wave}: ${enemyWave.enemiesInWave} wrogow | ${theme.name.toUpperCase()} - ${theme.desc}${mutatorTag} | role: ${roles} <<<`);
+      if (mutator) toast(`MUTATOR FALI: ${mutator.name} - ${mutator.desc}`);
       playTone(200, 100, "sawtooth", 0.05);
       playTone(250, 100, "sawtooth", 0.05);
     }
 
     function makeEnemyProjectile(enemy, color, speed, damage) {
+      const mutator = getWaveMutator();
+      const speedMul = mutator && mutator.hostileProjectileMul ? mutator.hostileProjectileMul : 1;
       const dir = enemy.x + enemy.w / 2 < state.player.x + state.player.w / 2 ? 1 : -1;
       return {
         x: enemy.x + enemy.w / 2,
         y: enemy.y + enemy.h * 0.4,
-        vx: dir * speed,
+        vx: dir * speed * speedMul,
         vy: 0,
         r: 6,
         dmg: damage,
@@ -1086,8 +1130,10 @@
         if (attackName === "Wir Kling") {
           spawnArenaHazard("bladeSpin", { x: boss.x + boss.w / 2, y: boss.y + boss.h / 2, r: 86, dmg: 2, life: 1600 });
         } else if (attackName === "Rykoszet") {
+          const mutator = getWaveMutator();
+          const speedMul = mutator && mutator.hostileProjectileMul ? mutator.hostileProjectileMul : 1;
           for (let i = 0; i < 3; i++) {
-            state.bullets.push({ x: boss.x + boss.w / 2, y: boss.y + 24 + i * 16, vx: -3.8, vy: i === 1 ? 0 : (i === 0 ? -0.7 : 0.7), r: 6, dmg: 1, color: "#cbd5e1", life: 150, hostile: true, enemyRole: "boss" });
+            state.bullets.push({ x: boss.x + boss.w / 2, y: boss.y + 24 + i * 16, vx: -3.8 * speedMul, vy: (i === 1 ? 0 : (i === 0 ? -0.7 : 0.7)) * speedMul, r: 6, dmg: 1, color: "#cbd5e1", life: 150, hostile: true, enemyRole: "boss" });
           }
         } else if (attackName === "Doskok Egzekutora") {
           boss.dashTimer = 300;
@@ -1251,6 +1297,8 @@
       enemyWave.spawned = 0;
       enemyWave.timer = 0;
       enemyWave.announced = false;
+      state.run.activeWaveMutator = null;
+      state.run.toxicTick = 0;
       applyWaveTheme();
       chestSpawn.timer = 0;
       state.player.x = 60;
@@ -1423,7 +1471,9 @@
       const queue = Math.max(0, enemyWave.enemiesInWave - enemyWave.spawned);
       const phaseTag = state.run.phase === "running" ? "RUN" : state.run.phase.toUpperCase();
       const themeTag = enemyWave.theme ? ` | ${enemyWave.theme.name}` : "";
-      questEl.textContent = `${phaseTag} Fala ${enemyWave.wave}${themeTag} (${queue} w kolejce)`;
+      const mutator = getWaveMutator();
+      const mutatorTag = mutator ? ` | ${mutator.name}` : "";
+      questEl.textContent = `${phaseTag} Fala ${enemyWave.wave}${themeTag}${mutatorTag} (${queue} w kolejce)`;
       
       const worldInfoEl = document.getElementById("worldInfo");
       if (state.currentWorld) {
@@ -1434,11 +1484,16 @@
       const mutCount = (state.run.activeMutations || []).length;
       const synCount = (state.run.activeSynergies || []).length;
       if (state.run.phase === "running" && (mutCount > 0 || synCount > 0)) {
-        mutInfoEl.textContent = `${mutCount} mut + ${synCount} syn`;
-        mutInfoEl.style.color = synCount > 0 ? "#fbbf24" : "#a855f7";
+        if (mutator) {
+          mutInfoEl.textContent = `${mutator.name} | ${mutCount} mut + ${synCount} syn`;
+          mutInfoEl.style.color = mutator.color || "#fbbf24";
+        } else {
+          mutInfoEl.textContent = `${mutCount} mut + ${synCount} syn`;
+          mutInfoEl.style.color = synCount > 0 ? "#fbbf24" : "#a855f7";
+        }
       } else {
-        mutInfoEl.textContent = mutCount > 0 ? `${mutCount} mutacji` : "Brak mutacji";
-        mutInfoEl.style.color = "#e2e8f0";
+        mutInfoEl.textContent = mutator ? `${mutator.name}: ${mutator.desc}` : (mutCount > 0 ? `${mutCount} mutacji` : "Brak mutacji");
+        mutInfoEl.style.color = mutator ? (mutator.color || "#e2e8f0") : "#e2e8f0";
       }
       
       bossStateEl.textContent = state.boss ? `${state.boss.name} HP ${Math.max(0, Math.floor(state.boss.hp))}` : "Brak";
@@ -1483,6 +1538,7 @@
     function spawnEnemy() {
       const wave = enemyWave.wave;
       const theme = enemyWave.theme || getWaveTheme(wave);
+      const mutator = getWaveMutator();
       const world = state.currentWorld || WORLDS[0];
       if (world && enemyWave.wave >= world.waves[0] && enemyWave.wave <= world.waves[1]) {
         state.currentWorld = world;
@@ -1521,6 +1577,8 @@
       if (role === "charger") finalSpeed *= 1.12;
       if (role === "buffer") finalSpeed *= 0.82;
       if (role === "summoner") finalSpeed *= 0.78;
+      if (mutator && mutator.enemySpeedMul) finalSpeed *= mutator.enemySpeedMul;
+      const hpMul = mutator && mutator.enemyHpMul ? mutator.enemyHpMul : 1;
       const roleActionCd = {
         charger: 1100 + Math.random() * 500,
         ranged: 1500 + Math.random() * 600,
@@ -1533,8 +1591,8 @@
         y: state.groundY - size.h,
         w: size.w,
         h: size.h,
-        hp: elite ? Math.floor(hp * 1.45) : hp,
-        maxHp: elite ? Math.floor(hp * 1.45) : hp,
+        hp: Math.floor((elite ? hp * 1.45 : hp) * hpMul),
+        maxHp: Math.floor((elite ? hp * 1.45 : hp) * hpMul),
         speed: finalSpeed,
         baseSpeed: finalSpeed,
         palette,
@@ -1968,6 +2026,8 @@
 
     function step(dt) {
       const p = state.player;
+      const waveMutator = getWaveMutator();
+      const now = performance.now();
       const wasOnGround = p.onGround;
       const fallSpeed = p.vy;
 
@@ -1976,7 +2036,7 @@
       if (state.pressed.right) { p.vx = p.speed; p.dir = 1; }
 
       p.x += p.vx;
-      p.vy += state.gravity;
+      p.vy += state.gravity * (waveMutator && waveMutator.gravityMul ? waveMutator.gravityMul : 1);
       p.y += p.vy;
 
       if (p.x < 0) p.x = 0;
@@ -2015,6 +2075,25 @@
         p.breathScale = 1;
       }
 
+      if (waveMutator && waveMutator.toxicGround) {
+        state.run.toxicTick -= dt;
+        if (p.onGround && state.run.toxicTick <= 0) {
+          state.run.toxicTick = 900;
+          if (now - state.lastDamage > 350) {
+            if (p.shieldActive) {
+              state.lastDamage = now;
+              playTone(480, 60, "sine", 0.04);
+            } else {
+              state.currentHearts = Math.max(0, state.currentHearts - 1);
+              state.lastDamage = now;
+              state.damageFlash = 8;
+              addScreenShake(2.5);
+              toast("Toksyczna ziemia! -1 SERCE");
+            }
+          }
+        }
+      }
+
       if (p.animState === "run") {
         p.legAngle = Math.sin(p.runCycle) * 0.55;
         p.armAngle = -Math.sin(p.runCycle) * 0.45;
@@ -2043,7 +2122,6 @@
         p.shieldActive = false;
       }
 
-      const now = performance.now();
       let tookDamage = false;
       const waveDmg = Math.floor(enemyWave.wave * 0.3);
 
@@ -2869,8 +2947,13 @@
 
       ctx.fillStyle = "#14532d";
       ctx.fillRect(0, state.groundY, state.w, state.h - state.groundY);
-      ctx.fillStyle = "#16a34a";
+      const activeMutator = getWaveMutator();
+      ctx.fillStyle = activeMutator && activeMutator.toxicGround ? "#65a30d" : "#16a34a";
       ctx.fillRect(0, state.groundY, state.w, 8);
+      if (activeMutator && activeMutator.toxicGround) {
+        ctx.fillStyle = "rgba(74, 222, 128, 0.18)";
+        ctx.fillRect(0, state.groundY - 6, state.w, 10);
+      }
 
       for (let x = 0; x < state.w; x += 14) {
         ctx.fillStyle = "#22c55e";
@@ -3237,11 +3320,13 @@
             spawnRunBoss("final");
           } else if (!state.run.finalBossSpawned) {
             enemyWave.wave++;
+            rollWaveMutator(enemyWave.wave);
             applyWaveTheme();
             enemyWave.spawned = 0;
             enemyWave.timer = -1500;
             enemyWave.announced = false;
-            const waveReward = 20 + enemyWave.wave * 8;
+            const mutator = getWaveMutator();
+            const waveReward = 20 + enemyWave.wave * 8 + (mutator && mutator.rewardBonus ? mutator.rewardBonus : 0);
             addCoins(waveReward, `fala ${enemyWave.wave - 1}`);
             playTone(320, 200, "triangle", 0.04);
             
@@ -3284,10 +3369,16 @@
       const down = ev => {
         ev.preventDefault();
         if (state.run.phase !== "running") return;
+        if (HAS_POINTER_EVENTS && ev.pointerId != null && btn.setPointerCapture) {
+          try { btn.setPointerCapture(ev.pointerId); } catch (_) {}
+        }
         state.pressed[key] = value;
       };
       const up = ev => {
         ev.preventDefault();
+        if (HAS_POINTER_EVENTS && ev.pointerId != null && btn.releasePointerCapture) {
+          try { btn.releasePointerCapture(ev.pointerId); } catch (_) {}
+        }
         state.pressed[key] = false;
       };
       if (HAS_POINTER_EVENTS) {
@@ -3405,10 +3496,16 @@
     const shieldDown = ev => {
       ev.preventDefault();
       if (state.run.phase !== "running") return;
+      if (HAS_POINTER_EVENTS && ev.pointerId != null && shieldBtn.setPointerCapture) {
+        try { shieldBtn.setPointerCapture(ev.pointerId); } catch (_) {}
+      }
       state.player.shieldKey = true;
     };
     const shieldUp = ev => {
       ev.preventDefault();
+      if (HAS_POINTER_EVENTS && ev.pointerId != null && shieldBtn.releasePointerCapture) {
+        try { shieldBtn.releasePointerCapture(ev.pointerId); } catch (_) {}
+      }
       state.player.shieldKey = false;
     };
     if (HAS_POINTER_EVENTS) {
@@ -3483,6 +3580,7 @@
       document.addEventListener("touchstart", startBgmOnce, { once: true, passive: true });
     }
     document.addEventListener("keydown", startBgmOnce, { once: true });
+    document.addEventListener("contextmenu", ev => ev.preventDefault());
     
     requestAnimationFrame(loop);
   </script>
