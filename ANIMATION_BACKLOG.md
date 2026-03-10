@@ -18,15 +18,15 @@
 ### Task 1.3: Enemy Hit/Death
 - [x] **1.3.1** Add hit flash effect (white → normal)
 - [x] **1.3.2** Add knockback on hit
-- [ ] **1.3.3** Add death animation (fall + fade)
+- [x] **1.3.3** Add death animation (fall + fade)
 - [x] **1.3.4** Add blood/damage particles
 
 ### Task 1.4: Particle System Expansion
 - [x] **1.4.1** Add dust particle type
 - [x] **1.4.2** Add blood particle type  
-- [ ] **1.4.3** Add fire particle type
+- [x] **1.4.3** Add fire particle type
 - [x] **1.4.4** Add sword trail particle type
-- [ ] **1.4.5** Implement object pooling for particles
+- [ ] **1.4.5** Implement object pooling for particles (temporary cap safeguard added)
 
 ---
 
@@ -78,9 +78,9 @@
 - [x] 1.1.3 Run animation  
 - [x] 1.1.5 Landing dust
 - [ ] 1.2.4 Shield pulse polish
-- [ ] 1.3.3 Full death fall + fade animation
-- [ ] 1.4.3 Fire particles
-- [ ] 1.4.5 Particle object pooling
+- [x] 1.3.3 Full death fall + fade animation
+- [x] 1.4.3 Fire particles
+- [ ] 1.4.5 Particle object pooling (full)
 
 ## Notes
 - Use delta-time for all animations

@@ -1079,6 +1079,7 @@
       };
       toast(mini ? `MINI BOSS: ${bossData.name}!` : `FINAL BOSS: ${bossData.name}!`);
       playTone(mini ? 130 : 90, 260, "sawtooth", 0.06);
+      if (state.sound.enabled) AudioManager.bossAppear(mini);
     }
 
     function fitCanvas() {
@@ -1806,6 +1807,7 @@
       if (kills > 0) {
         state.stats.kills += kills;
         playTone(520, 120, "triangle", 0.035);
+        if (state.sound.enabled) AudioManager.enemyDeath();
         addCoins(5 * kills, "potworek");
         addXp(15 * kills, "kill", state.w - 60, state.groundY - 30);
         
@@ -1891,6 +1893,9 @@
         p.life--;
       });
       state.particles = state.particles.filter(p => p.life > 0);
+      if (state.particles.length > MAX_PARTICLES) {
+        state.particles.splice(0, state.particles.length - MAX_PARTICLES);
+      }
 
       state.chests = state.chests.filter(c => {
         if (rectHit(p, c)) {
@@ -1898,6 +1903,7 @@
             if (state.currentHearts < state.maxHearts) {
               state.currentHearts++;
               playTone(900, 150, "triangle", 0.05);
+              if (state.sound.enabled) AudioManager.playerHeal();
               toast("+1 SERCE! (skrzynka lecznica)");
             } else {
               addCoins(10, "pełne zycie");
@@ -1908,6 +1914,7 @@
           }
           state.stats.chestsOpened++;
           playTone(720, 100, "triangle", 0.03);
+          if (state.sound.enabled) AudioManager.chestOpen();
           return false;
         }
         return true;
@@ -1989,14 +1996,16 @@
         ctx.save();
         ctx.translate(sx + p.w/2, sy + p.h/2);
         ctx.scale(facing, 1);
+        const pulse = p.shieldPulse > 0 ? p.shieldPulse / 14 : 0;
+        const radius = 28 + pulse * 6;
         
-        const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, 28);
-        grd.addColorStop(0, "rgba(254,240,138,0.6)");
-        grd.addColorStop(0.5, "rgba(251,191,36,0.3)");
+        const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+        grd.addColorStop(0, `rgba(254,240,138,${0.55 + pulse * 0.2})`);
+        grd.addColorStop(0.5, `rgba(251,191,36,${0.3 + pulse * 0.15})`);
         grd.addColorStop(1, "rgba(245,158,11,0)");
         ctx.fillStyle = grd;
         ctx.beginPath();
-        ctx.arc(0, 0, 28, 0, Math.PI * 2);
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
         ctx.fill();
         
         ctx.strokeStyle = "#fbbf24";
@@ -2017,6 +2026,16 @@
       const eyeW = Math.max(3, Math.floor(e.w * 0.12));
       const eyeY = e.y + Math.floor(e.h * 0.22);
       const hitFlashActive = e.hitFlash > 0;
+      const isDying = !!e.dying;
+
+      if (isDying) {
+        const fade = Math.max(0, 1 - e.deathFrame / 420);
+        ctx.save();
+        ctx.globalAlpha = fade;
+        ctx.translate(e.x + e.w / 2, e.y + e.h);
+        ctx.rotate((e.deathAngle || 0) * (e.x % 2 === 0 ? 1 : -1));
+        ctx.translate(-(e.x + e.w / 2), -(e.y + e.h));
+      }
       
       if (hitFlashActive) {
         ctx.save();
@@ -2110,6 +2129,9 @@
       }
       
       if (hitFlashActive) {
+        ctx.restore();
+      }
+      if (isDying) {
         ctx.restore();
       }
     }
@@ -2400,6 +2422,17 @@
           ctx.fillStyle = p.color;
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.size || 2, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (p.isFire) {
+          const alpha = Math.max(0, p.life / 26);
+          const r = p.size || 2;
+          ctx.fillStyle = `rgba(251,146,60,${alpha})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r + 1.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = `rgba(239,68,68,${alpha * 0.9})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
           ctx.fill();
         } else {
           ctx.fillStyle = p.color;

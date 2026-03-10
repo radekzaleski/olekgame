@@ -1,32 +1,32 @@
 # Audio Implementation Backlog
 
 ## Faza 1 - Core Audio System (MVP)
-- [ ] **1.1** Create `AudioManager` class in `index.html`
+- [x] **1.1** Create `AudioManager` class in `index.html`
   - Web Audio API context initialization
   - Master volume control
   - Mute/unmute functionality
-  - Preload sound assets
+  - Preload sound assets (synth-based)
 
-- [ ] **1.2** Implement `Sound` class
+- [x] **1.2** Implement `Sound` class
   - Load audio files (mp3/ogg/wav)
   - Play with volume control
-  - Pool system for overlapping sounds
+  - Pool system for overlapping sounds (via createOsc)
   - Stop/fade functionality
 
-- [ ] **1.3** Add UI sounds
+- [x] **1.3** Add UI sounds
   - `ui_click` - button clicks
   - `ui_hover` - button hover
   - `mutation_select` - card selection
   - `item_pickup` - coin/item pickup
   - `upgrade` - upgrade confirm
 
-- [ ] **1.4** Add basic combat sounds
+- [x] **1.4** Add basic combat sounds
   - `player_sword_swing`
   - `player_sword_hit`
   - `player_bow_shoot`
   - `player_arrow_hit`
 
-- [ ] **1.5** Add wave notifications
+- [x] **1.5** Add wave notifications
   - `wave_start`
   - `wave_complete`
 
