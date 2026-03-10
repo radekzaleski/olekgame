@@ -13,7 +13,7 @@
 - [x] **1.2.1** Extend sword swing arc (144° → 270°)
 - [x] **1.2.2** Add sword trail particles
 - [x] **1.2.3** Add arrow release particles
-- [ ] **1.2.4** Add shield pulse effect
+- [x] **1.2.4** Add shield pulse effect
 
 ### Task 1.3: Enemy Hit/Death
 - [x] **1.3.1** Add hit flash effect (white → normal)
@@ -26,7 +26,7 @@
 - [x] **1.4.2** Add blood particle type  
 - [x] **1.4.3** Add fire particle type
 - [x] **1.4.4** Add sword trail particle type
-- [ ] **1.4.5** Implement object pooling for particles (temporary cap safeguard added)
+- [x] **1.4.5** Implement object pooling for particles
 
 ---
 
@@ -50,8 +50,8 @@
 ## Faza 3: Polish
 
 ### Task 3.1: Screen Effects
-- [ ] **3.1.1** Add screen shake on heavy hits
-- [ ] **3.1.2** Add screen shake on boss attacks
+- [x] **3.1.1** Add screen shake on heavy hits
+- [x] **3.1.2** Add screen shake on boss attacks
 - [ ] **3.1.3** Add block flash effect
 
 ### Task 3.2: UI Animations
@@ -77,10 +77,10 @@
 - [x] 1.1.2 Idle breathing animation
 - [x] 1.1.3 Run animation  
 - [x] 1.1.5 Landing dust
-- [ ] 1.2.4 Shield pulse polish
+- [x] 1.2.4 Shield pulse polish
 - [x] 1.3.3 Full death fall + fade animation
 - [x] 1.4.3 Fire particles
-- [ ] 1.4.5 Particle object pooling (full)
+- [x] 1.4.5 Particle object pooling
 
 ## Notes
 - Use delta-time for all animations

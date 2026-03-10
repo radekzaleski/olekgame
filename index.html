@@ -788,8 +788,10 @@
       enemies: [],
       bullets: [],
       particles: [],
+      particlePool: [],
       chests: [],
       boss: null,
+      screenShake: 0,
       debug: false,
       damageFlash: 0,
       lastDamage: 0,
@@ -955,6 +957,7 @@
 
     function draftMutations() {
       const choices = getMutationChoices(3);
+      state.run.phase = "mutation";
       runTitleEl.textContent = "Wybierz Mutacje";
       runTextEl.innerHTML = choices.map((c, i) => `
         <div class="mutationCard ${c.rarity}" onclick="pickMutation(${i})">
@@ -971,6 +974,7 @@
       window.pickMutation = (idx) => {
         const chosen = choices[idx];
         state.run.activeMutations.push(chosen);
+        state.run.phase = "running";
         toast(`+ ${chosen.name}`);
         playTone(600, 120, "triangle", 0.04);
         checkSynergies();
@@ -1201,7 +1205,7 @@
       state.xp += amount;
       state.lastXp = amount;
       
-      state.particles.push({
+      pushParticle({
         x: x,
         y: y,
         vx: (Math.random() - 0.5) * 1.5,
@@ -1343,7 +1347,7 @@
       for (let i = 0; i < 8; i++) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 1.5 + Math.random() * 2;
-        state.particles.push({
+        pushParticle({
           x: target.x + target.w / 2,
           y: target.y + target.h / 2,
           vx: Math.cos(angle) * speed,
@@ -1356,9 +1360,24 @@
       }
     }
 
+    function pushParticle(particle) {
+      const reused = state.particlePool.pop();
+      if (!reused) {
+        state.particles.push(particle);
+        return;
+      }
+      for (const key in reused) delete reused[key];
+      Object.assign(reused, particle);
+      state.particles.push(reused);
+    }
+
+    function addScreenShake(amount) {
+      state.screenShake = Math.min(18, state.screenShake + amount);
+    }
+
     function spawnLandingDust(x, y) {
       for (let i = 0; i < 6; i++) {
-        state.particles.push({
+        pushParticle({
           x: x + (Math.random() - 0.5) * 20,
           y: y + Math.random() * 3,
           vx: (Math.random() - 0.5) * 1.8,
@@ -1395,7 +1414,7 @@
 
       if (isFireSwing) {
         for (let i = 0; i < 10; i++) {
-          state.particles.push({
+          pushParticle({
             x: p.x + p.w / 2 + p.dir * (12 + Math.random() * 18),
             y: p.y + p.h / 2 - 6 + (Math.random() - 0.5) * 10,
             vx: p.dir * (1 + Math.random() * 1.4),
@@ -1460,7 +1479,7 @@
       });
 
       for (let i = 0; i < 8; i++) {
-        state.particles.push({
+        pushParticle({
           x: p.x + p.w / 2 + p.dir * 12,
           y: p.y + p.h / 2 - 5,
           vx: p.dir * (1.5 + Math.random() * 1.5),
@@ -1474,7 +1493,7 @@
 
       if (power === "fire" || power === "fire_blade" || power === "fire_storm" || power === "tri") {
         for (let i = 0; i < 7; i++) {
-          state.particles.push({
+          pushParticle({
             x: p.x + p.w / 2 + p.dir * 10,
             y: p.y + p.h / 2 - 5 + (Math.random() - 0.5) * 6,
             vx: p.dir * (1.4 + Math.random() * 1.2),
@@ -1511,7 +1530,7 @@
           e.x = Math.max(0, Math.min(e.x, state.w - e.w));
           e.hitCd = 30;
           for (let i = 0; i < 5; i++) {
-            state.particles.push({
+            pushParticle({
               x: e.x + e.w/2,
               y: e.y + e.h/2,
               vx: (Math.random() - 0.5) * 3,
@@ -1532,7 +1551,7 @@
         state.boss.hitCd = 25;
       }
       
-      state.particles.push({
+      pushParticle({
         x: cx,
         y: cy,
         vx: 0,
@@ -1545,7 +1564,7 @@
       
       for (let i = 0; i < 12; i++) {
         const angle = (i / 12) * Math.PI * 2;
-        state.particles.push({
+        pushParticle({
           x: cx,
           y: cy,
           vx: Math.cos(angle) * 4,
@@ -1716,6 +1735,7 @@
             playTone(600, 60, "sine", 0.05);
             e.x += dist > 0 ? 15 : -15;
             e.x = Math.max(0, Math.min(e.x, state.w - e.w));
+            addScreenShake(1.5);
             if (now - state.lastBlockToast > 350) {
               toast("BLOKADA!");
               state.lastBlockToast = now;
@@ -1729,6 +1749,7 @@
             e.hitCd = 50;
             state.lastDamage = now;
             tookDamage = true;
+            addScreenShake(5);
             playTone(180, 100, "sawtooth", 0.06);
             state.damageFlash = 12;
             const attacker = e.className ? `${e.className} ${e.title}` : e.title;
@@ -1754,6 +1775,7 @@
             playTone(500, 80, "sine", 0.06);
             b.x += dist > 0 ? 25 : -25;
             b.x = Math.max(0, Math.min(b.x, state.w - b.w));
+            addScreenShake(2.5);
             if (now - state.lastBlockToast > 350) {
               toast("BLOKADA BOSS!");
               state.lastBlockToast = now;
@@ -1765,6 +1787,7 @@
             b.hitCd = 40;
             state.lastDamage = now;
             tookDamage = true;
+            addScreenShake(8);
             playTone(120, 140, "sawtooth", 0.07);
             state.damageFlash = 18;
             toast(`!!! BOSS ${b.name} TRAFIA! -3 SERCA !!!`);
@@ -1816,7 +1839,7 @@
           for (let i = 0; i < 12; i++) {
             const angle = Math.random() * Math.PI * 2;
             const speed = 1 + Math.random() * 2.5;
-            state.particles.push({
+            pushParticle({
               x: e.x + e.w / 2,
               y: e.y + e.h / 2,
               vx: Math.cos(angle) * speed,
@@ -1893,9 +1916,21 @@
         p.y += p.vy;
         p.life--;
       });
-      state.particles = state.particles.filter(p => p.life > 0);
+      for (let i = state.particles.length - 1; i >= 0; i--) {
+        const particle = state.particles[i];
+        if (particle.life > 0) continue;
+        state.particlePool.push(particle);
+        const lastIdx = state.particles.length - 1;
+        state.particles[i] = state.particles[lastIdx];
+        state.particles.pop();
+      }
       if (state.particles.length > MAX_PARTICLES) {
-        state.particles.splice(0, state.particles.length - MAX_PARTICLES);
+        const overflow = state.particles.length - MAX_PARTICLES;
+        for (let i = 0; i < overflow; i++) {
+          const particle = state.particles[i];
+          if (particle) state.particlePool.push(particle);
+        }
+        state.particles.splice(0, overflow);
       }
 
       state.chests = state.chests.filter(c => {
@@ -2184,6 +2219,16 @@
     function draw() {
       ctx.clearRect(0, 0, state.w, state.h);
 
+      let shakeX = 0;
+      let shakeY = 0;
+      if (state.screenShake > 0.05) {
+        shakeX = (Math.random() - 0.5) * state.screenShake;
+        shakeY = (Math.random() - 0.5) * state.screenShake;
+        state.screenShake = Math.max(0, state.screenShake - 0.65);
+      }
+      ctx.save();
+      ctx.translate(shakeX, shakeY);
+
       if (state.damageFlash > 0) {
         const alpha = state.damageFlash / 18;
         ctx.fillStyle = `rgba(220, 38, 38, ${alpha * 0.5})`;
@@ -2278,7 +2323,7 @@
         ctx.arc(0, 0, 5, 0, Math.PI * 2);
         ctx.fill();
 
-        state.particles.push({
+        pushParticle({
           x: sx + Math.cos(p.dir > 0 ? swingAngle : -swingAngle + Math.PI) * (swordLen * 0.85),
           y: sy + Math.sin(p.dir > 0 ? swingAngle : -swingAngle + Math.PI) * (swordLen * 0.85),
           vx: (Math.random() - 0.5) * 1.2,
@@ -2441,6 +2486,8 @@
         }
       });
 
+      ctx.restore();
+
       const p = state.player;
       for (let i = 0; i < state.maxHearts; i++) {
         const hx = 10 + i * 22;
@@ -2490,7 +2537,6 @@
             
             if ((state.run.activeMutations || []).length < 6 && [2, 4, 6, 8].includes(enemyWave.wave)) {
               draftMutations();
-              return;
             }
           }
         }
@@ -2550,7 +2596,7 @@
 
     document.addEventListener("keydown", ev => {
       if (state.run.phase !== "running") {
-        if (ev.code === "Enter") startRun();
+        if (ev.code === "Enter" && ["menu", "reward", "gameover"].includes(state.run.phase)) startRun();
         return;
       }
       if (ev.code === "KeyA" || ev.code === "ArrowLeft") state.pressed.left = true;
