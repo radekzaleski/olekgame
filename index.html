@@ -832,9 +832,15 @@
       }
     };
 
-    const enemyWave = { timer: 0, every: 3500, wave: 1, enemiesInWave: 2, spawned: 0, announced: false };
+    const enemyWave = { timer: 0, every: 3500, wave: 1, enemiesInWave: 2, spawned: 0, announced: false, theme: null };
     const chestSpawn = { timer: 0, every: 12000 };
     const MAX_PARTICLES = 220;
+    const ROLE_COLORS = {
+      charger: "#fb7185",
+      ranged: "#38bdf8",
+      buffer: "#34d399",
+      summoner: "#c084fc"
+    };
     const enemySizes = [
       { name: "maly", w: 24, h: 26, hpMul: 0.85, speedMul: 1.18 },
       { name: "sredni", w: 30, h: 34, hpMul: 1.05, speedMul: 1.0 },
@@ -857,6 +863,35 @@
       basic: ["Gotowy!", "Kolejny!", "Zneutralizowany!", "Skonczony!", "Wygnany!"],
       elite: ["Zniszczony!", "Rozprawiony!", "Pokonany!", "Zwyciezony!", "Smierc pewna!"],
       boss: ["ZABITY!", "ZNISZCZONY!", "WYMAGAJACY!", "Potwor upadl!", "Walka wygrana!"]
+    };
+    const WAVE_THEMES = {
+      rush: {
+        id: "rush",
+        name: "Rush",
+        color: "#fb7185",
+        desc: "Szarza i presja w zwarciu",
+        spawnInterval: 1900,
+        extraEnemies: 1,
+        roleWeights: { charger: 5, ranged: 1, buffer: 1, summoner: 1 }
+      },
+      zoning: {
+        id: "zoning",
+        name: "Zoning",
+        color: "#38bdf8",
+        desc: "Ostrzal, buffy i kontrola dystansu",
+        spawnInterval: 2900,
+        extraEnemies: 0,
+        roleWeights: { charger: 1, ranged: 4, buffer: 3, summoner: 2 }
+      },
+      mixed: {
+        id: "mixed",
+        name: "Mixed",
+        color: "#fbbf24",
+        desc: "Mieszana ekipa i rotacja rol",
+        spawnInterval: 2400,
+        extraEnemies: 0,
+        roleWeights: { charger: 3, ranged: 3, buffer: 2, summoner: 2 }
+      }
     };
 
     const MUTATION_TAGS = ["fire", "blade", "storm", "defense", "mobility", "attack"];
@@ -887,6 +922,101 @@
       { name: "Tarcza Ognia", tags: ["fire", "defense"], effect: { shieldDmg: 2, element: "fire" }, color: "#ef4444" },
       { name: "Szybki Walczacy", tags: ["blade", "mobility"], effect: { atkSpd: 0.7, speedMul: 1.1 }, color: "#22c55e" }
     ];
+
+    function weightedPick(weights, available) {
+      const pool = available.filter(role => (weights[role] || 0) > 0);
+      if (pool.length === 0) return available[0] || "charger";
+      const total = pool.reduce((sum, role) => sum + weights[role], 0);
+      let roll = Math.random() * total;
+      for (const role of pool) {
+        roll -= weights[role];
+        if (roll <= 0) return role;
+      }
+      return pool[pool.length - 1];
+    }
+
+    function getAvailableRolesForWave(wave) {
+      if (wave <= 2) return ["charger"];
+      if (wave <= 3) return ["charger", "ranged"];
+      if (wave <= 4) return ["charger", "ranged", "buffer"];
+      return ["charger", "ranged", "buffer", "summoner"];
+    }
+
+    function getWaveTheme(wave) {
+      if (wave === 1) return WAVE_THEMES.rush;
+      const cycle = [WAVE_THEMES.rush, WAVE_THEMES.zoning, WAVE_THEMES.mixed];
+      return cycle[(wave - 1) % cycle.length];
+    }
+
+    function applyWaveTheme() {
+      const theme = getWaveTheme(enemyWave.wave);
+      enemyWave.theme = theme;
+      enemyWave.every = theme.spawnInterval;
+      enemyWave.enemiesInWave = Math.min(2 + Math.floor((enemyWave.wave - 1) / 2) + theme.extraEnemies, 8);
+    }
+
+    function announceWaveTheme() {
+      const theme = enemyWave.theme || getWaveTheme(enemyWave.wave);
+      const roles = getAvailableRolesForWave(enemyWave.wave).join(" / ");
+      toast(`>>> FALA ${enemyWave.wave}: ${enemyWave.enemiesInWave} wrogow | ${theme.name.toUpperCase()} - ${theme.desc} | role: ${roles} <<<`);
+      playTone(200, 100, "sawtooth", 0.05);
+      playTone(250, 100, "sawtooth", 0.05);
+    }
+
+    function makeEnemyProjectile(enemy, color, speed, damage) {
+      const dir = enemy.x + enemy.w / 2 < state.player.x + state.player.w / 2 ? 1 : -1;
+      return {
+        x: enemy.x + enemy.w / 2,
+        y: enemy.y + enemy.h * 0.4,
+        vx: dir * speed,
+        vy: 0,
+        r: 6,
+        dmg: damage,
+        color,
+        life: 120,
+        hostile: true,
+        enemyRole: enemy.role,
+        trail: []
+      };
+    }
+
+    function spawnSummonMinion(enemy) {
+      const minion = {
+        x: Math.max(0, Math.min(state.w - 24, enemy.x + (Math.random() < 0.5 ? -30 : 30))),
+        y: state.groundY - 24,
+        w: 22,
+        h: 24,
+        hp: 10 + enemyWave.wave,
+        maxHp: 10 + enemyWave.wave,
+        speed: 1.25 + enemyWave.wave * 0.03,
+        palette: enemy.palette,
+        sizeName: "maly",
+        armor: false,
+        helmet: false,
+        weapon: null,
+        elite: false,
+        enemyType: "przyzwanie",
+        title: "sluga",
+        className: "Echa",
+        killMsg: "rozpadl sie!",
+        hitCd: 0,
+        dying: false,
+        deathFrame: 0,
+        deathHandled: false,
+        deathAngle: 0,
+        role: "charger",
+        roleLabel: "sluga",
+        intent: null,
+        telegraph: 0,
+        telegraphMax: 0,
+        dashTimer: 0,
+        actionCd: 900 + Math.random() * 400,
+        buffedUntil: 0,
+        summonCap: 0,
+        summonCount: 0
+      };
+      state.enemies.push(minion);
+    }
 
     function loadEssence() {
       const raw = localStorage.getItem(RUN_STORAGE_KEY);
@@ -1007,9 +1137,9 @@
       state.lastDmgType = null;
       enemyWave.wave = 1;
       enemyWave.spawned = 0;
-      enemyWave.enemiesInWave = 2;
       enemyWave.timer = 0;
       enemyWave.announced = false;
+      applyWaveTheme();
       chestSpawn.timer = 0;
       state.player.x = 60;
       state.player.y = state.groundY - state.player.h;
@@ -1169,7 +1299,8 @@
       document.getElementById("xpText").textContent = `${state.xp % state.xpToNextHeart} / ${state.xpToNextHeart} XP`;
       const queue = Math.max(0, enemyWave.enemiesInWave - enemyWave.spawned);
       const phaseTag = state.run.phase === "running" ? "RUN" : state.run.phase.toUpperCase();
-      questEl.textContent = `${phaseTag} Fala ${enemyWave.wave} (${queue} w kolejce)`;
+      const themeTag = enemyWave.theme ? ` | ${enemyWave.theme.name}` : "";
+      questEl.textContent = `${phaseTag} Fala ${enemyWave.wave}${themeTag} (${queue} w kolejce)`;
       
       const worldInfoEl = document.getElementById("worldInfo");
       if (state.currentWorld) {
@@ -1228,6 +1359,7 @@
 
     function spawnEnemy() {
       const wave = enemyWave.wave;
+      const theme = enemyWave.theme || getWaveTheme(wave);
       const world = state.currentWorld || WORLDS[0];
       if (world && enemyWave.wave >= world.waves[0] && enemyWave.wave <= world.waves[1]) {
         state.currentWorld = world;
@@ -1251,15 +1383,37 @@
       const elite = wave >= 6 && Math.random() < Math.min(0.08 + wave * 0.015, 0.28);
       const title = enemyType.titles[Math.floor(Math.random() * enemyType.titles.length)];
       const className = enemyClasses[Math.floor(Math.random() * Math.min(enemyClasses.length, 1 + wave / 3))];
+      const availableRoles = getAvailableRolesForWave(wave);
+      const role = weightedPick(theme.roleWeights, availableRoles);
+      const roleLabel = {
+        charger: "charger",
+        ranged: "ranged",
+        buffer: "buffer",
+        summoner: "summoner"
+      }[role] || role;
+      const spawnFromLeft = role === "charger" ? Math.random() < 0.45 : Math.random() < 0.2;
+      const spawnX = spawnFromLeft ? -size.w - 20 : state.w + 20;
+      let finalSpeed = Math.min(speed, 1.85);
+      if (theme.id === "rush") finalSpeed *= 1.08;
+      if (role === "charger") finalSpeed *= 1.12;
+      if (role === "buffer") finalSpeed *= 0.82;
+      if (role === "summoner") finalSpeed *= 0.78;
+      const roleActionCd = {
+        charger: 1100 + Math.random() * 500,
+        ranged: 1500 + Math.random() * 600,
+        buffer: 2000 + Math.random() * 700,
+        summoner: 2200 + Math.random() * 900
+      }[role];
       
       const enemy = {
-        x: state.w + 20,
+        x: spawnX,
         y: state.groundY - size.h,
         w: size.w,
         h: size.h,
         hp: elite ? Math.floor(hp * 1.45) : hp,
         maxHp: elite ? Math.floor(hp * 1.45) : hp,
-        speed: Math.min(speed, 1.85),
+        speed: finalSpeed,
+        baseSpeed: finalSpeed,
         palette,
         sizeName: size.name,
         armor: Math.random() < armorChance,
@@ -1274,7 +1428,20 @@
         dying: false,
         deathFrame: 0,
         deathHandled: false,
-        deathAngle: 0
+        deathAngle: 0,
+        role,
+        roleLabel,
+        roleColor: ROLE_COLORS[role] || palette.eye,
+        themeId: theme.id,
+        intent: null,
+        telegraph: 0,
+        telegraphMax: 0,
+        dashTimer: 0,
+        actionCd: roleActionCd,
+        buffedUntil: 0,
+        summonCap: role === "summoner" ? 1 + Math.floor(wave / 4) : 0,
+        summonCount: 0,
+        contactDmg: 1 + (elite ? 1 : 0)
       };
       
       state.enemies.push(enemy);
@@ -1721,16 +1888,98 @@
           e.deathAngle = Math.min(Math.PI / 2, e.deathFrame * 0.0105);
           continue;
         }
+        const enemyCenterY = e.y + e.h / 2;
         const playerCenterX = p.x + p.w / 2;
         const enemyCenterX = e.x + e.w / 2;
         const dist = enemyCenterX - playerCenterX;
         const contactRange = p.w / 2 + e.w / 2 + 6;
-        if (Math.abs(dist) > contactRange) {
-          e.x += dist > 0 ? -e.speed : e.speed;
-          e.x = Math.max(0, Math.min(e.x, state.w - e.w));
-        } else if (e.hitCd > 0) {
-          e.hitCd--;
-        } else if (now - state.lastDamage > 600) {
+        const playerDistY = Math.abs(enemyCenterY - (p.y + p.h / 2));
+        if (e.hitCd > 0) e.hitCd--;
+        if (e.telegraph > 0) {
+          e.telegraph -= dt;
+          if (e.telegraph <= 0) {
+            if (e.intent === "charge") {
+              e.dashTimer = 260;
+            } else if (e.intent === "shoot") {
+              state.bullets.push(makeEnemyProjectile(e, e.roleColor, 4 + enemyWave.wave * 0.15, 1 + Math.floor(enemyWave.wave / 4)));
+              playTone(240, 80, "sawtooth", 0.03);
+            } else if (e.intent === "buff") {
+              const allies = state.enemies.filter(other => other !== e && !other.dying && Math.abs((other.x + other.w / 2) - enemyCenterX) < 120);
+              allies.forEach(other => {
+                other.buffedUntil = performance.now() + 2400;
+                other.speed = Math.min(other.baseSpeed * 1.35, 3);
+                other.hp = Math.min(other.maxHp, other.hp + 2);
+              });
+              toast(`Buffer wzmacnia ${allies.length || 1} cele!`);
+            } else if (e.intent === "summon" && e.summonCount < e.summonCap) {
+              spawnSummonMinion(e);
+              e.summonCount++;
+              toast("Summoner wzywa posilki!");
+            }
+            e.intent = null;
+          }
+        }
+        if (e.buffedUntil && e.buffedUntil < performance.now()) {
+          e.buffedUntil = 0;
+          e.speed = e.baseSpeed;
+        }
+        e.actionCd -= dt;
+        if (e.dashTimer > 0) {
+          e.dashTimer -= dt;
+          const dashDir = dist > 0 ? -1 : 1;
+          e.x += dashDir * Math.max(3.8, e.speed * 3.2);
+        } else if (e.role === "ranged") {
+          const idealRange = 160;
+          if (Math.abs(dist) < idealRange - 20) e.x += dist > 0 ? e.speed : -e.speed;
+          else if (Math.abs(dist) > idealRange + 35) e.x += dist > 0 ? -e.speed : e.speed;
+          if (!e.intent && e.actionCd <= 0 && Math.abs(dist) > 90 && playerDistY < 70) {
+            e.intent = "shoot";
+            e.telegraph = 520;
+            e.telegraphMax = 520;
+            e.actionCd = 1650 + Math.random() * 550;
+          }
+        } else if (e.role === "buffer") {
+          const ally = state.enemies.find(other => other !== e && !other.dying && Math.abs(other.x - e.x) < 110);
+          if (ally) {
+            if (ally.x < e.x - 36) e.x -= e.speed * 0.75;
+            if (ally.x > e.x + 36) e.x += e.speed * 0.75;
+          } else if (Math.abs(dist) < 120) {
+            e.x += dist > 0 ? e.speed * 0.8 : -e.speed * 0.8;
+          }
+          if (!e.intent && e.actionCd <= 0 && state.enemies.length > 1) {
+            e.intent = "buff";
+            e.telegraph = 700;
+            e.telegraphMax = 700;
+            e.actionCd = 2600 + Math.random() * 700;
+          }
+        } else if (e.role === "summoner") {
+          if (Math.abs(dist) < 140) e.x += dist > 0 ? e.speed : -e.speed;
+          else if (Math.abs(dist) > 220) e.x += dist > 0 ? -e.speed * 0.7 : e.speed * 0.7;
+          if (!e.intent && e.actionCd <= 0 && e.summonCount < e.summonCap) {
+            e.intent = "summon";
+            e.telegraph = 820;
+            e.telegraphMax = 820;
+            e.actionCd = 3200 + Math.random() * 900;
+          }
+        } else {
+          if (Math.abs(dist) > contactRange) {
+            e.x += dist > 0 ? -e.speed : e.speed;
+          }
+          if (!e.intent && e.actionCd <= 0 && Math.abs(dist) > 50 && Math.abs(dist) < 220) {
+            e.intent = "charge";
+            e.telegraph = 360;
+            e.telegraphMax = 360;
+            e.actionCd = 1350 + Math.random() * 550;
+          }
+        }
+        e.x = Math.max(0, Math.min(e.x, state.w - e.w));
+        if (Math.abs(dist) > contactRange && e.role !== "ranged" && e.role !== "buffer" && e.role !== "summoner" && e.hitCd > 0) {
+          continue;
+        }
+        if (Math.abs(dist) > contactRange || playerDistY > 52) {
+          continue;
+        }
+        if (e.hitCd <= 0 && now - state.lastDamage > 600) {
           if (p.shieldActive) {
             playTone(600, 60, "sine", 0.05);
             e.x += dist > 0 ? 15 : -15;
@@ -1744,7 +1993,7 @@
             state.lastDamage = now;
             continue;
           } else {
-            const dmg = 1 + (e.elite ? 2 : 0) + waveDmg;
+            const dmg = (e.contactDmg || 1) + waveDmg;
             state.currentHearts = Math.max(0, state.currentHearts - dmg);
             e.hitCd = 50;
             state.lastDamage = now;
@@ -1801,6 +2050,24 @@
         bullet.x += bullet.vx;
         bullet.y += bullet.vy;
         bullet.life--;
+
+        if (bullet.hostile) {
+          if (circleRectHit(bullet, state.player)) {
+            if (p.shieldActive) {
+              bullet.life = 0;
+              addScreenShake(1.2);
+              playTone(560, 60, "sine", 0.05);
+            } else if (now - state.lastDamage > 320) {
+              state.currentHearts = Math.max(0, state.currentHearts - bullet.dmg);
+              state.lastDamage = now;
+              state.damageFlash = 10;
+              addScreenShake(3);
+              toast(`Pocisk ${bullet.enemyRole || "wroga"}! -${bullet.dmg} SERCA`);
+            }
+            bullet.life = 0;
+          }
+          continue;
+        }
 
         for (const e of state.enemies) {
           if (e.hp > 0 && circleRectHit(bullet, e)) {
@@ -1886,6 +2153,7 @@
           toast(">>> Mini boss pokonany! Droga do finalu otwarta. <<<");
           state.boss = null;
           enemyWave.wave = Math.max(enemyWave.wave, 6);
+          applyWaveTheme();
           enemyWave.spawned = enemyWave.enemiesInWave;
         } else if (state.boss.runTier === "final") {
           addCoins(220, "final boss");
@@ -2108,6 +2376,29 @@
         ctx.fillRect(e.x + 7, e.y + 5, e.w - 14, 2);
       }
 
+      if (e.role === "charger") {
+        ctx.fillStyle = e.roleColor;
+        ctx.beginPath();
+        ctx.moveTo(e.x + e.w / 2, e.y - 8);
+        ctx.lineTo(e.x + e.w / 2 - 5, e.y + 2);
+        ctx.lineTo(e.x + e.w / 2 + 5, e.y + 2);
+        ctx.closePath();
+        ctx.fill();
+      } else if (e.role === "ranged") {
+        ctx.strokeStyle = e.roleColor;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(e.x + e.w - 8, e.y + 6, 6, 6);
+      } else if (e.role === "buffer") {
+        ctx.strokeStyle = e.roleColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(e.x + e.w / 2, e.y - 2, 5, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (e.role === "summoner") {
+        ctx.fillStyle = e.roleColor;
+        ctx.fillRect(e.x + e.w / 2 - 4, e.y - 8, 8, 8);
+      }
+
       ctx.fillStyle = pal.eye;
       ctx.fillRect(e.x + Math.floor(e.w * 0.24), eyeY, eyeW, eyeW);
       ctx.fillRect(e.x + Math.floor(e.w * 0.62), eyeY, eyeW, eyeW);
@@ -2283,6 +2574,34 @@
       }
 
       drawPlayerSprite(state.player);
+      state.enemies.forEach(e => {
+        if (!e.telegraph || e.telegraph <= 0 || !e.telegraphMax) return;
+        const pct = Math.max(0, Math.min(1, e.telegraph / e.telegraphMax));
+        ctx.save();
+        ctx.globalAlpha = 0.2 + (1 - pct) * 0.45;
+        ctx.strokeStyle = e.roleColor || "#f8fafc";
+        ctx.lineWidth = 2;
+        if (e.intent === "charge") {
+          const dir = e.x < state.player.x ? 1 : -1;
+          ctx.beginPath();
+          ctx.moveTo(e.x + e.w / 2, e.y + e.h / 2);
+          ctx.lineTo(e.x + e.w / 2 + dir * 120 * (1 - pct * 0.2), e.y + e.h / 2);
+          ctx.stroke();
+        } else if (e.intent === "shoot") {
+          ctx.beginPath();
+          ctx.moveTo(e.x + e.w / 2, e.y + e.h / 2);
+          ctx.lineTo(state.player.x + state.player.w / 2, state.player.y + state.player.h / 2);
+          ctx.stroke();
+        } else if (e.intent === "buff") {
+          ctx.beginPath();
+          ctx.arc(e.x + e.w / 2, e.y + e.h / 2, 30 + (1 - pct) * 18, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (e.intent === "summon") {
+          ctx.beginPath();
+          ctx.strokeRect(e.x - 10, state.groundY - 28, e.w + 20, 24);
+        }
+        ctx.restore();
+      });
       state.enemies.forEach(drawEnemySprite);
       state.chests.forEach(drawChestSprite);
 
@@ -2527,7 +2846,7 @@
             spawnRunBoss("final");
           } else if (!state.run.finalBossSpawned) {
             enemyWave.wave++;
-            enemyWave.enemiesInWave = Math.min(2 + Math.floor(enemyWave.wave / 2), 6);
+            applyWaveTheme();
             enemyWave.spawned = 0;
             enemyWave.timer = -1500;
             enemyWave.announced = false;
@@ -2543,18 +2862,7 @@
 
         if (!enemyWave.announced && state.enemies.length === 0 && enemyWave.spawned < enemyWave.enemiesInWave && !state.boss) {
           enemyWave.announced = true;
-          const w = enemyWave.wave;
-          const enemies = enemyWave.enemiesInWave;
-          let enemyDesc = "";
-          if (w <= 2) enemyDesc = "Zwykli zombie";
-          else if (w <= 4) enemyDesc = "Zombie i wojownicy";
-          else if (w <= 6) enemyDesc = "Wojownicy, zlodzieje";
-          else if (w <= 8) enemyDesc = "Wojownicy, barbarzyncy";
-          else enemyDesc = "Wszyscy razem!";
-          if (w >= 6 && Math.random() < 0.35) enemyDesc += " (moze byc ELITA!)";
-          toast(`>>> FALA ${w}: ${enemies} wrogow - ${enemyDesc} <<<`);
-          playTone(200, 100, "sawtooth", 0.05);
-          playTone(250, 100, "sawtooth", 0.05);
+          announceWaveTheme();
         }
 
         if (chestSpawn.timer > chestSpawn.every && state.chests.length < 2) {
