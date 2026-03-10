@@ -2238,6 +2238,25 @@
       return dx * dx + dy * dy <= c.r * c.r;
     }
 
+    function tryStompEnemy(player, enemy) {
+      if (!enemy || enemy.hp <= 0 || enemy.dying) return false;
+      const fallingFast = player.vy > 1.2;
+      const fromAbove = player.y + player.h <= enemy.y + enemy.h * 0.45;
+      const overlapX = player.x + player.w > enemy.x + 5 && player.x < enemy.x + enemy.w - 5;
+      if (!fallingFast || !fromAbove || !overlapX) return false;
+
+      enemy.hp = 0;
+      enemy.hitCd = 24;
+      player.y = enemy.y - player.h;
+      player.vy = player.jump * 0.72;
+      player.onGround = false;
+      player.jumpsLeft = Math.max(player.jumpsLeft, 1);
+      addScreenShake(2.2);
+      playTone(720, 70, "triangle", 0.04);
+      toast("SKOK NA GLOWE!");
+      return true;
+    }
+
     function applyMutation() {
       const owned = Object.keys(state.unlocked).filter(k => state.unlocked[k]);
       if (owned.length < 2) {
@@ -2470,6 +2489,9 @@
           continue;
         }
         if (Math.abs(dist) > contactRange || playerDistY > 52) {
+          continue;
+        }
+        if (tryStompEnemy(p, e)) {
           continue;
         }
         if (e.hitCd <= 0 && now - state.lastDamage > 600) {
