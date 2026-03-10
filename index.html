@@ -316,6 +316,270 @@
   </div>
 
   <script>
+    const AudioManager = {
+      ctx: null,
+      masterGain: null,
+      sfxGain: null,
+      musicGain: null,
+      bgmInterval: null,
+      bgmNote: 0,
+      combatMode: false,
+      worldId: "fire",
+
+      init() {
+        if (this.ctx) return;
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        this.ctx = new AC();
+        this.masterGain = this.ctx.createGain();
+        this.sfxGain = this.ctx.createGain();
+        this.musicGain = this.ctx.createGain();
+        
+        this.masterGain.gain.value = 0.7;
+        this.sfxGain.gain.value = 0.8;
+        this.musicGain.gain.value = 0.4;
+        
+        this.sfxGain.connect(this.masterGain);
+        this.musicGain.connect(this.masterGain);
+        this.masterGain.connect(this.ctx.destination);
+      },
+
+      resume() {
+        if (this.ctx && this.ctx.state === "suspended") {
+          this.ctx.resume();
+        }
+      },
+
+      setWorld(id) {
+        this.worldId = id;
+        if (this.bgmInterval) {
+          this.stopBGM();
+          this.startBGM();
+        }
+      },
+
+      setCombatMode(combating) {
+        this.combatMode = combating;
+      },
+
+      createOsc(freq, type, duration, volume, detune = 0) {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        osc.detune.value = detune;
+        gain.gain.value = volume;
+        osc.connect(gain);
+        gain.connect(this.sfxGain);
+        const t = this.ctx.currentTime;
+        gain.gain.setValueAtTime(volume, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + duration / 1000);
+        osc.start(t);
+        osc.stop(t + duration / 1000);
+        return { osc, gain };
+      },
+
+      playNoise(duration, volume, filterFreq = 1000) {
+        if (!this.ctx) return;
+        const bufferSize = this.ctx.sampleRate * duration / 1000;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        const noise = this.ctx.createBufferSource();
+        const gain = this.ctx.createGain();
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = "lowpass";
+        filter.frequency.value = filterFreq;
+        noise.buffer = buffer;
+        gain.gain.value = volume;
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.sfxGain);
+        const t = this.ctx.currentTime;
+        gain.gain.setValueAtTime(volume, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + duration / 1000);
+        noise.start(t);
+        noise.stop(t + duration / 1000);
+      },
+
+      uiClick() {
+        this.createOsc(1200, "sine", 40, 0.08);
+        this.createOsc(1800, "sine", 30, 0.04);
+      },
+
+      uiHover() {
+        this.createOsc(800, "sine", 25, 0.03);
+      },
+
+      mutationSelect() {
+        this.createOsc(440, "triangle", 60, 0.06);
+        setTimeout(() => this.createOsc(660, "triangle", 80, 0.06), 50);
+      },
+
+      itemPickup(rarity = "common") {
+        const freq = rarity === "epic" ? 1200 : rarity === "rare" ? 900 : 700;
+        this.createOsc(freq, "sine", 80, 0.08);
+        this.createOsc(freq * 1.5, "sine", 60, 0.04);
+      },
+
+      upgrade() {
+        this.createOsc(330, "triangle", 100, 0.06);
+        this.createOsc(440, "triangle", 100, 0.06);
+        this.createOsc(550, "triangle", 120, 0.07);
+      },
+
+      playerSwing(power = "basic") {
+        const freqs = { basic: 220, fire: 180, blade: 380, storm: 440 };
+        const f = freqs[power] || 250;
+        this.createOsc(f, "square", 60, 0.05);
+        this.playNoise(40, 0.03, 2000);
+      },
+
+      playerHit() {
+        this.createOsc(180, "sawtooth", 80, 0.06);
+        this.createOsc(120, "square", 60, 0.04);
+      },
+
+      playerBowShoot() {
+        this.createOsc(520, "sine", 50, 0.06);
+        this.playNoise(30, 0.04, 3000);
+      },
+
+      playerDash() {
+        this.playNoise(120, 0.05, 800);
+        this.createOsc(200, "triangle", 80, 0.04);
+      },
+
+      playerBlock() {
+        this.createOsc(400, "square", 60, 0.08);
+        this.createOsc(300, "sine", 80, 0.06);
+      },
+
+      enemyHit() {
+        this.createOsc(140, "sawtooth", 60, 0.05);
+      },
+
+      enemyDeath() {
+        this.createOsc(200, "square", 100, 0.05);
+        this.createOsc(100, "sawtooth", 80, 0.04);
+        this.playNoise(60, 0.03, 500);
+      },
+
+      waveStart() {
+        this.createOsc(330, "triangle", 150, 0.08);
+        this.createOsc(440, "triangle", 150, 0.08);
+        this.createOsc(550, "triangle", 200, 0.08);
+      },
+
+      waveComplete() {
+        this.createOsc(440, "sine", 100, 0.07);
+        this.createOsc(660, "sine", 100, 0.07);
+        this.createOsc(880, "sine", 150, 0.07);
+      },
+
+      bossAppear(mini = false) {
+        const base = mini ? 110 : 80;
+        this.createOsc(base, "sawtooth", 200, 0.08);
+        this.createOsc(base * 1.5, "sawtooth", 180, 0.06);
+        this.createOsc(base * 2, "sawtooth", 250, 0.06);
+        this.playNoise(300, 0.06, 400);
+      },
+
+      bossDeath() {
+        this.createOsc(760, "triangle", 200, 0.07);
+        this.createOsc(460, "square", 300, 0.06);
+        this.playNoise(400, 0.08, 600);
+      },
+
+      playerDamage() {
+        this.createOsc(180, "sawtooth", 100, 0.08);
+        this.playNoise(80, 0.06, 400);
+      },
+
+      playerHeal() {
+        this.createOsc(600, "sine", 100, 0.06);
+        this.createOsc(800, "sine", 100, 0.05);
+        this.createOsc(1000, "sine", 150, 0.04);
+      },
+
+      chestOpen() {
+        this.createOsc(720, "triangle", 80, 0.06);
+        this.createOsc(960, "triangle", 120, 0.05);
+      },
+
+      worldEnter(worldId) {
+        this.worldId = worldId;
+        const worldThemes = {
+          fire: [110, 0, 110, 0, 146, 0, 146, 0],
+          blade: [98, 0, 98, 0, 123, 0, 123, 0],
+          storm: [130, 0, 130, 0, 164, 0, 164, 0],
+          mutation: [82, 0, 82, 0, 110, 0, 110, 0],
+          gold: [147, 0, 147, 0, 185, 0, 185, 0]
+        };
+        const theme = worldThemes[worldId] || worldThemes.fire;
+        theme.forEach((freq, i) => {
+          if (freq > 0) {
+            setTimeout(() => this.createOsc(freq, "triangle", 200, 0.06), i * 150);
+          }
+        });
+      },
+
+      startBGM() {
+        if (this.bgmInterval) return;
+        
+        const bassLines = {
+          fire: [110, 0, 110, 0, 146, 0, 146, 0, 130, 0, 130, 0, 98, 0, 98, 0],
+          blade: [98, 0, 98, 0, 123, 0, 123, 0, 110, 0, 110, 0, 82, 0, 82, 0],
+          storm: [130, 0, 130, 0, 164, 0, 164, 0, 147, 0, 147, 0, 110, 0, 110, 0],
+          mutation: [82, 0, 82, 0, 110, 0, 110, 0, 98, 0, 98, 0, 73, 0, 73, 0],
+          gold: [147, 0, 147, 0, 185, 0, 185, 0, 165, 0, 165, 0, 131, 0, 131, 0]
+        };
+        
+        const melodies = {
+          fire: [330, 392, 440, 392, 330, 294, 262, 294, 330, 392, 440, 392, 330, 294, 262, 220],
+          blade: [262, 294, 330, 294, 262, 220, 196, 220, 262, 294, 330, 294, 262, 220, 196, 175],
+          storm: [392, 440, 523, 440, 392, 349, 330, 349, 392, 440, 523, 440, 392, 349, 330, 294],
+          mutation: [220, 262, 294, 262, 220, 196, 165, 196, 220, 262, 294, 262, 220, 196, 165, 147],
+          gold: [294, 349, 392, 349, 294, 262, 220, 262, 294, 349, 392, 349, 294, 262, 220, 196]
+        };
+
+        const bassLine = bassLines[this.worldId] || bassLines.fire;
+        const melody = melodies[this.worldId] || melodies.fire;
+
+        this.bgmInterval = setInterval(() => {
+          if (!state.sound.enabled) return;
+          
+          const tempo = this.combatMode ? 180 : 300;
+          const vol = this.combatMode ? 0.012 : 0.008;
+          
+          if (this.bgmNote % 2 === 0) {
+            const bassIdx = Math.floor(this.bgmNote / 2) % bassLine.length;
+            if (bassLine[bassIdx] > 0) {
+              this.createOsc(bassLine[bassIdx], "triangle", tempo * 1.5, vol);
+            }
+          }
+          
+          if (!this.combatMode || Math.random() > 0.4) {
+            const melIdx = this.bgmNote % melody.length;
+            this.createOsc(melody[melIdx], "square", tempo, vol * 0.6);
+          }
+          
+          this.bgmNote++;
+        }, 300);
+      },
+
+      stopBGM() {
+        if (this.bgmInterval) {
+          clearInterval(this.bgmInterval);
+          this.bgmInterval = null;
+        }
+        this.bgmNote = 0;
+      }
+    };
+
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
 
@@ -509,7 +773,8 @@
         breathScale: 1,
         breathDir: 1,
         landSquish: 0,
-        runCycle: 0
+        runCycle: 0,
+        shieldPulse: 0
       },
       pressed: { left: false, right: false },
       activePower: "basic",
@@ -528,6 +793,7 @@
       debug: false,
       damageFlash: 0,
       lastDamage: 0,
+      lastBlockToast: 0,
       lastXp: 0,
       run: {
         phase: "menu",
@@ -566,6 +832,7 @@
 
     const enemyWave = { timer: 0, every: 3500, wave: 1, enemiesInWave: 2, spawned: 0, announced: false };
     const chestSpawn = { timer: 0, every: 12000 };
+    const MAX_PARTICLES = 220;
     const enemySizes = [
       { name: "maly", w: 24, h: 26, hpMul: 0.85, speedMul: 1.18 },
       { name: "sredni", w: 30, h: 34, hpMul: 1.05, speedMul: 1.0 },
@@ -729,6 +996,7 @@
       state.currentHearts = state.maxHearts;
       state.damageFlash = 0;
       state.lastDamage = 0;
+      state.lastBlockToast = 0;
       state.stats.kills = 0;
       state.stats.chestsOpened = 0;
       state.currentWorld = WORLDS[0];
@@ -833,17 +1101,15 @@
 
     function ensureAudio() {
       if (!state.sound.enabled) return null;
-      if (!state.sound.ctx) {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (!AC) return null;
-        state.sound.ctx = new AC();
-      }
-      if (state.sound.ctx.state === "suspended") state.sound.ctx.resume();
-      return state.sound.ctx;
+      AudioManager.init();
+      AudioManager.resume();
+      return AudioManager.ctx;
     }
 
     function playTone(freq, duration, type, volume) {
-      const ac = ensureAudio();
+      AudioManager.init();
+      AudioManager.resume();
+      const ac = AudioManager.ctx;
       if (!ac) return;
       const osc = ac.createOscillator();
       const gain = ac.createGain();
@@ -860,55 +1126,11 @@
     }
 
     function startBGM() {
-      const ac = ensureAudio();
-      if (!ac || state.sound.bgm) return;
+      AudioManager.init();
+      AudioManager.resume();
+      if (AudioManager.bgmInterval) return;
       
-      const bassLine = [110, 0, 110, 0, 146, 0, 146, 0, 130, 0, 130, 0, 98, 0, 98, 0];
-      const melody = [330, 392, 440, 392, 330, 294, 262, 294, 330, 392, 440, 392, 330, 294, 262, 220];
-      
-      state.sound.bgm = setInterval(() => {
-        if (!state.sound.enabled || state.player.shotCd > 0) return;
-        
-        const tempo = state.sound.combat ? 180 : 280;
-        const vol = state.sound.combat ? 0.015 : 0.01;
-        
-        if (state.sound.bgmNote % 2 === 0) {
-          const bassIdx = Math.floor(state.sound.bgmNote / 2) % bassLine.length;
-          if (bassLine[bassIdx] > 0) {
-            const osc = ac.createOscillator();
-            const gain = ac.createGain();
-            osc.type = "triangle";
-            osc.frequency.value = bassLine[bassIdx];
-            gain.gain.value = vol;
-            osc.connect(gain);
-            gain.connect(ac.destination);
-            const t = ac.currentTime;
-            gain.gain.setValueAtTime(vol, t);
-            gain.gain.exponentialRampToValueAtTime(0.001, t + tempo / 1000 * 1.5);
-            osc.start(t);
-            osc.stop(t + tempo / 1000 * 1.5);
-          }
-        }
-        
-        if (!state.sound.combat || Math.random() > 0.3) {
-          const melIdx = state.sound.bgmNote % melody.length;
-          const osc = ac.createOscillator();
-          const gain = ac.createGain();
-          osc.type = "square";
-          osc.frequency.value = melody[melIdx];
-          gain.gain.value = vol * 0.7;
-          osc.connect(gain);
-          gain.connect(ac.destination);
-          const t = ac.currentTime;
-          gain.gain.setValueAtTime(vol * 0.7, t);
-          gain.gain.exponentialRampToValueAtTime(0.001, t + tempo / 1000);
-          osc.start(t);
-          osc.stop(t + tempo / 1000);
-        }
-        
-        state.sound.bgmNote++;
-      }, 280);
-    }
+      AudioManager.startBGM();
 
     function addCoins(v, reason) {
       state.coins += v;
@@ -1042,7 +1264,11 @@
         title,
         className,
         killMsg: enemyType.kills[Math.floor(Math.random() * enemyType.kills.length)],
-        hitCd: 0
+        hitCd: 0,
+        dying: false,
+        deathFrame: 0,
+        deathHandled: false,
+        deathAngle: 0
       };
       
       state.enemies.push(enemy);
@@ -1089,6 +1315,7 @@
         runTier: "normal"
       };
       playTone(140, 280, "sawtooth", 0.05);
+      if (state.sound.enabled) AudioManager.bossAppear(false);
       toast(`Boss ${b.name} wszedl na arene!`);
       updateHud();
     }
@@ -1097,6 +1324,7 @@
       if (!state.unlocked[kind]) {
         state.unlocked[kind] = true;
         playTone(660, 160, "triangle", 0.04);
+        if (state.sound.enabled) AudioManager.upgrade();
         toast(`Nowa moc: ${kind.toUpperCase()}!`);
       }
       if (kind === "fire") document.getElementById("powerFire").classList.remove("lock");
@@ -1109,6 +1337,7 @@
       target.hitFlash = 8;
       const knockDir = state.player.dir;
       target.x += knockDir * 6;
+      target.x = Math.max(0, Math.min(target.x, state.w - target.w));
       for (let i = 0; i < 8; i++) {
         const angle = Math.random() * Math.PI * 2;
         const speed = 1.5 + Math.random() * 2;
@@ -1160,8 +1389,25 @@
 
       p.sword = { frame: 0, dmg, color, range };
       p.shotCd = 22;
+      const isFireSwing = power.includes("fire") || power === "tri";
+
+      if (isFireSwing) {
+        for (let i = 0; i < 10; i++) {
+          state.particles.push({
+            x: p.x + p.w / 2 + p.dir * (12 + Math.random() * 18),
+            y: p.y + p.h / 2 - 6 + (Math.random() - 0.5) * 10,
+            vx: p.dir * (1 + Math.random() * 1.4),
+            vy: -1.8 + Math.random() * 1.2,
+            life: 16 + Math.random() * 12,
+            color: Math.random() < 0.5 ? "#fb923c" : "#ef4444",
+            isFire: true,
+            size: 1.5 + Math.random() * 2
+          });
+        }
+      }
 
       state.enemies.forEach(e => {
+        if (e.dying) return;
         const dx = Math.abs((p.x + p.w/2) - (e.x + e.w/2));
         const dy = Math.abs((p.y + p.h/2) - (e.y + e.h/2));
         if (dx < range + 10 && dy < 35 && e.hp > 0) {
@@ -1180,6 +1426,7 @@
       }
 
       playTone(power === "fire" ? 220 : 380, 80, "square", 0.04);
+      if (state.sound.enabled) AudioManager.playerSwing(power);
     }
 
     function useBow() {
@@ -1222,8 +1469,24 @@
           size: 2 + Math.random() * 2
         });
       }
+
+      if (power === "fire" || power === "fire_blade" || power === "fire_storm" || power === "tri") {
+        for (let i = 0; i < 7; i++) {
+          state.particles.push({
+            x: p.x + p.w / 2 + p.dir * 10,
+            y: p.y + p.h / 2 - 5 + (Math.random() - 0.5) * 6,
+            vx: p.dir * (1.4 + Math.random() * 1.2),
+            vy: -1.4 + Math.random() * 1.1,
+            life: 14 + Math.random() * 10,
+            color: Math.random() < 0.5 ? "#f97316" : "#ef4444",
+            isFire: true,
+            size: 1.8 + Math.random() * 1.6
+          });
+        }
+      }
       
       playTone(440, 80, "sine", 0.05);
+      if (state.sound.enabled) AudioManager.playerBowShoot();
       updateHud();
     }
 
@@ -1243,6 +1506,7 @@
         const dist = Math.abs(dx);
         if (dist < 80) {
           e.x += (dx > 0 ? 1 : -1) * 120;
+          e.x = Math.max(0, Math.min(e.x, state.w - e.w));
           e.hitCd = 30;
           for (let i = 0; i < 5; i++) {
             state.particles.push({
@@ -1262,6 +1526,7 @@
       if (state.boss) {
         const dx = state.boss.x - p.x;
         state.boss.x += (dx > 0 ? 1 : -1) * 80;
+        state.boss.x = Math.max(0, Math.min(state.boss.x, state.w - state.boss.w));
         state.boss.hitCd = 25;
       }
       
@@ -1291,9 +1556,11 @@
       }
       
       p.hasShield = true;
+      p.shieldPulse = 14;
       setTimeout(() => p.hasShield = false, 400);
       
       playTone(180, 120, "sawtooth", 0.06);
+      if (state.sound.enabled) AudioManager.playerBlock();
       toast("ODPCHNIECIE!");
       updateHud();
     }
@@ -1378,6 +1645,7 @@
       }
 
       if (p.landSquish > 0) p.landSquish--;
+      if (p.shieldPulse > 0) p.shieldPulse--;
       p.animTimer += dt;
       if (!p.onGround) {
         p.animState = p.vy < 0 ? "jump" : "fall";
@@ -1427,19 +1695,29 @@
       const waveDmg = Math.floor(enemyWave.wave * 0.3);
 
       for (const e of state.enemies) {
+        if (e.dying) {
+          e.deathFrame += dt;
+          e.deathAngle = Math.min(Math.PI / 2, e.deathFrame * 0.0105);
+          continue;
+        }
         const playerCenterX = p.x + p.w / 2;
         const enemyCenterX = e.x + e.w / 2;
         const dist = enemyCenterX - playerCenterX;
         const contactRange = p.w / 2 + e.w / 2 + 6;
         if (Math.abs(dist) > contactRange) {
           e.x += dist > 0 ? -e.speed : e.speed;
+          e.x = Math.max(0, Math.min(e.x, state.w - e.w));
         } else if (e.hitCd > 0) {
           e.hitCd--;
         } else if (now - state.lastDamage > 600) {
           if (p.shieldActive) {
             playTone(600, 60, "sine", 0.05);
             e.x += dist > 0 ? 15 : -15;
-            toast("BLOKADA!");
+            e.x = Math.max(0, Math.min(e.x, state.w - e.w));
+            if (now - state.lastBlockToast > 350) {
+              toast("BLOKADA!");
+              state.lastBlockToast = now;
+            }
             e.hitCd = 30;
             state.lastDamage = now;
             continue;
@@ -1466,13 +1744,18 @@
         const contactRange = p.w / 2 + b.w / 2 + 4;
         if (Math.abs(dist) > contactRange) {
           b.x += dist > 0 ? -0.8 : 0.8;
+          b.x = Math.max(0, Math.min(b.x, state.w - b.w));
         }
         if (b.hitCd > 0) b.hitCd--;
         if (Math.abs(dist) <= contactRange && now - state.lastDamage > 800) {
           if (p.shieldActive) {
             playTone(500, 80, "sine", 0.06);
             b.x += dist > 0 ? 25 : -25;
-            toast("BLOKADA BOSS!");
+            b.x = Math.max(0, Math.min(b.x, state.w - b.w));
+            if (now - state.lastBlockToast > 350) {
+              toast("BLOKADA BOSS!");
+              state.lastBlockToast = now;
+            }
             b.hitCd = 40;
             state.lastDamage = now;
           } else {
@@ -1510,10 +1793,16 @@
         }
       }
 
-      const beforeEnemies = state.enemies.length;
-      const killedEnemies = state.enemies.filter(e => e.hp <= 0);
-      state.enemies = state.enemies.filter(e => e.hp > 0);
-      const kills = beforeEnemies - state.enemies.length;
+      const killedEnemies = [];
+      state.enemies.forEach(e => {
+        if (e.hp <= 0 && !e.dying) {
+          e.dying = true;
+          e.deathFrame = 0;
+          e.deathHandled = false;
+          killedEnemies.push(e);
+        }
+      });
+      const kills = killedEnemies.length;
       if (kills > 0) {
         state.stats.kills += kills;
         playTone(520, 120, "triangle", 0.035);
@@ -1560,6 +1849,8 @@
           }
         });
       }
+
+      state.enemies = state.enemies.filter(e => !(e.dying && e.deathFrame > 420));
 
       if (state.boss && state.boss.hp <= 0) {
         if (state.boss.runTier === "mini") {
