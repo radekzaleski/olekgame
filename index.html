@@ -356,6 +356,32 @@
       .frontCard h1 { font-size: 24px; }
     }
 
+    @media (orientation: portrait) and (pointer: coarse) {
+      #orientationWarning {
+        display: flex;
+      }
+    }
+
+    #orientationWarning {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-size: 18px;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    #orientationWarning span {
+      font-size: 32px;
+    }
+
     body.mobile-ui .hud,
     body.mobile-ui .pad,
     body.mobile-ui .actions,
@@ -363,18 +389,113 @@
       backdrop-filter: none;
     }
 
+    body.mobile-ui .hud {
+      grid-template-columns: 1fr 1fr 1fr;
+      font-size: 11px;
+      padding: 6px;
+      gap: 4px;
+    }
+
+    body.mobile-ui .hud .line:nth-child(n+7) {
+      display: none;
+    }
+
+    body.mobile-ui .hud .line span {
+      display: none;
+    }
+
+    body.mobile-ui .hud .line strong {
+      font-size: 12px;
+    }
+
     body.mobile-ui #jumpBtn,
     body.mobile-ui #attackBtn,
-    body.mobile-ui #soundBtn {
+    body.mobile-ui #soundBtn,
+    body.mobile-ui #cyclePowerBtn,
+    body.mobile-ui #mutateBtn,
+    body.mobile-ui .pad button {
       display: none;
     }
 
     body.mobile-ui .controls {
-      min-height: 132px;
+      display: none;
+    }
+
+    body.mobile-ui .arenaTouchLayer {
+      display: flex;
+    }
+
+    .arenaTouchLayer {
+      display: none;
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    body.mobile-ui .arenaTouchLayer {
+      display: flex;
+    }
+
+    body:not(.mobile-ui) .arenaTouchLayer {
+      display: none;
+    }
+
+    .arenaTouchZone {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .arenaTouchZone:active {
+      opacity: 0.25;
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .arenaTouchZone.left { justify-content: flex-start; padding-left: 8%; }
+    .arenaTouchZone.right { justify-content: flex-end; padding-right: 8%; }
+
+    .arenaTouchZone::after {
+      content: "";
+      display: block;
+      width: 48px;
+      height: 48px;
+      border: 3px solid rgba(255, 255, 255, 0.4);
+      border-radius: 50%;
+    }
+
+    .arenaTouchZone.left::after {
+      border-right: none;
+      border-radius: 24px 8px 8px 24px;
+    }
+
+    .arenaTouchZone.right::after {
+      border-left: none;
+      border-radius: 8px 24px 24px 8px;
+    }
+
+    .arenaTouchZone.center::after {
+      border-style: dashed;
+      border-width: 4px;
+    }
+
+    .arenaTouchZone.jump::after {
+      content: "";
+      border-radius: 8px;
+      border: 3px dashed rgba(255, 255, 255, 0.5);
     }
   </style>
 </head>
 <body>
+  <div id="orientationWarning">
+    <span>↻</span>
+    Obróć telefon na poziomo<br>aby zagrać
+  </div>
+
   <div id="app">
     <div class="hud">
       <div class="line"><span>HP:</span><strong class="hp" id="hp">100</strong></div>
@@ -394,6 +515,11 @@
 
     <div class="arenaWrap">
       <canvas id="game"></canvas>
+      <div class="arenaTouchLayer">
+        <div class="arenaTouchZone left" id="touchLeft"></div>
+        <div class="arenaTouchZone center" id="touchAttack"></div>
+        <div class="arenaTouchZone right" id="touchRight"></div>
+      </div>
       <div id="toast"></div>
       <div id="runOverlay" class="runOverlay hidden">
         <div class="runCard">
@@ -3906,6 +4032,40 @@
           onArenaTouchEnd(t.identifier);
         }
       }, { passive: false });
+    }
+
+    const touchLeftEl = document.getElementById("touchLeft");
+    const touchRightEl = document.getElementById("touchRight");
+    const touchAttackEl = document.getElementById("touchAttack");
+
+    if (touchLeftEl) {
+      const leftDown = ev => { ev.preventDefault(); state.pressed.left = true; };
+      const leftUp = ev => { ev.preventDefault(); state.pressed.left = false; };
+      touchLeftEl.addEventListener("pointerdown", leftDown);
+      touchLeftEl.addEventListener("pointerup", leftUp);
+      touchLeftEl.addEventListener("pointerleave", leftUp);
+      touchLeftEl.addEventListener("touchstart", leftDown, { passive: false });
+      touchLeftEl.addEventListener("touchend", leftUp, { passive: false });
+    }
+
+    if (touchRightEl) {
+      const rightDown = ev => { ev.preventDefault(); state.pressed.right = true; };
+      const rightUp = ev => { ev.preventDefault(); state.pressed.right = false; };
+      touchRightEl.addEventListener("pointerdown", rightDown);
+      touchRightEl.addEventListener("pointerup", rightUp);
+      touchRightEl.addEventListener("pointerleave", rightUp);
+      touchRightEl.addEventListener("touchstart", rightDown, { passive: false });
+      touchRightEl.addEventListener("touchend", rightUp, { passive: false });
+    }
+
+    if (touchAttackEl) {
+      const attackHandler = ev => {
+        ev.preventDefault();
+        if (state.run.phase !== "running") return;
+        attack();
+      };
+      touchAttackEl.addEventListener("pointerdown", attackHandler);
+      touchAttackEl.addEventListener("touchstart", attackHandler, { passive: false });
     }
 
     bindHold("leftBtn", "left", true);
