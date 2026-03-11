@@ -355,6 +355,23 @@
       .frontActions { grid-template-columns: 1fr; }
       .frontCard h1 { font-size: 24px; }
     }
+
+    body.mobile-ui .hud,
+    body.mobile-ui .pad,
+    body.mobile-ui .actions,
+    body.mobile-ui .frontOverlay {
+      backdrop-filter: none;
+    }
+
+    body.mobile-ui #jumpBtn,
+    body.mobile-ui #attackBtn,
+    body.mobile-ui #soundBtn {
+      display: none;
+    }
+
+    body.mobile-ui .controls {
+      min-height: 132px;
+    }
   </style>
 </head>
 <body>
@@ -969,7 +986,14 @@
 
     const enemyWave = { timer: 0, every: 3500, wave: 1, enemiesInWave: 2, spawned: 0, announced: false, theme: null };
     const chestSpawn = { timer: 0, every: 12000 };
-    const MAX_PARTICLES = 220;
+    const MOBILE_MODE = window.matchMedia("(pointer: coarse)").matches || /iPhone|iPad|Android/i.test(navigator.userAgent);
+    const PERF = {
+      dprCap: MOBILE_MODE ? 1.25 : 2,
+      maxEnemiesPerWave: MOBILE_MODE ? 6 : 8,
+      maxParticles: MOBILE_MODE ? 120 : 220,
+      particleSpawnRate: MOBILE_MODE ? 0.6 : 1
+    };
+    if (MOBILE_MODE) document.body.classList.add("mobile-ui");
     const ROLE_COLORS = {
       charger: "#fb7185",
       ranged: "#38bdf8",
@@ -1170,7 +1194,7 @@
       const mutator = getWaveMutator();
       enemyWave.theme = theme;
       enemyWave.every = Math.max(1100, theme.spawnInterval * (mutator && mutator.spawnIntervalMul ? mutator.spawnIntervalMul : 1));
-      enemyWave.enemiesInWave = Math.min(2 + Math.floor((enemyWave.wave - 1) / 2) + theme.extraEnemies, 8);
+      enemyWave.enemiesInWave = Math.min(2 + Math.floor((enemyWave.wave - 1) / 2) + theme.extraEnemies, PERF.maxEnemiesPerWave);
       chestSpawn.every = 12000 * (mutator && mutator.chestEveryMul ? mutator.chestEveryMul : 1);
     }
 
@@ -1604,9 +1628,10 @@
 
     function fitCanvas() {
       const r = canvas.getBoundingClientRect();
-      canvas.width = Math.max(320, Math.floor(r.width * window.devicePixelRatio));
-      canvas.height = Math.max(220, Math.floor(r.height * window.devicePixelRatio));
-      ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+      const dpr = Math.min(window.devicePixelRatio || 1, PERF.dprCap);
+      canvas.width = Math.max(320, Math.floor(r.width * dpr));
+      canvas.height = Math.max(220, Math.floor(r.height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       state.w = r.width;
       state.h = r.height;
       state.groundY = state.h - 28;
@@ -1988,6 +2013,9 @@
     }
 
     function pushParticle(particle) {
+      if (MOBILE_MODE && !particle.isText && !particle.isRing && !particle.isImpactDecal && Math.random() > PERF.particleSpawnRate) {
+        return;
+      }
       const reused = state.particlePool.pop();
       if (!reused) {
         state.particles.push(particle);
@@ -2826,8 +2854,8 @@
         state.particles[i] = state.particles[lastIdx];
         state.particles.pop();
       }
-      if (state.particles.length > MAX_PARTICLES) {
-        const overflow = state.particles.length - MAX_PARTICLES;
+      if (state.particles.length > PERF.maxParticles) {
+        const overflow = state.particles.length - PERF.maxParticles;
         for (let i = 0; i < overflow; i++) {
           const particle = state.particles[i];
           if (particle) state.particlePool.push(particle);
